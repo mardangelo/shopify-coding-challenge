@@ -32,6 +32,18 @@ class ClientPrompt(Cmd):
 		self.check_if_logged_in()
 		print("To be implemented")
 
+	def do_add(self, path, price):
+		"""Adds an image (product) to Image Repository
+		
+		Uploads the image specified by path to the server along with the price.
+		
+		Arguments:
+			path {str} -- URL or local path to image file
+			price {float} -- cost of the image (product)
+		"""
+
+		print("Adding image located at %s" % path)
+
 	def do_exit(self, args):
 		"""Exits the image repository
 		
