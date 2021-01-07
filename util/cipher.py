@@ -23,10 +23,15 @@ class Cipher:
 
 	Attributes:
 		key (str): Secret key used for encrypting messages. 
+		key_path (str): The path to the secret.key file. Because the communicator is in a 
+						seperate module, we ensure that the same key is used for server and
+						client by determine where this project exists in the file system and 
+						always saving it in the root of that directory. 
 	"""
 
 	def __init__(self):
 		self.key = None
+		self.key_path = os.path.split(os.path.dirname(os.path.realpath(__file__)))[0]
 		self.retrieve_secret_key()
 
 	def create_secret_key(self):
@@ -38,7 +43,7 @@ class Cipher:
 		"""
 		key = os.urandom(16) 
 
-		with open('secret.key', 'wb') as f:
+		with open(self.key_path + '/secret.key', 'wb') as f:
 			f.write(key)
 
 		print("Generated secret.key")
@@ -52,8 +57,8 @@ class Cipher:
 		does not exist, it is generated. 
 		""" 
 
-		if os.path.isfile('secret.key'):
-			with open('secret.key', 'rb') as f:
+		if os.path.isfile(self.key_path + '/secret.key'):
+			with open(self.key_path + '/secret.key', 'rb') as f:
 				self.key = f.read(16)
 		else:
 			self.key = self.create_secret_key()
