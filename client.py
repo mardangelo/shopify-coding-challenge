@@ -18,7 +18,9 @@ class ClientPrompt(Cmd):
 	prompt = "image-repo> "
 	intro = "Welcome to Image Repository. Type ? to list commands"
 
-	user = "" # stores the name of the logged in user 
+	def __init__(self):
+		self.user = None 
+
 	def check_if_logged_in(self):
 		if self.user == "":
 			print("User must be logged in for this command to function")
