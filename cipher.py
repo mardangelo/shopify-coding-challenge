@@ -7,10 +7,7 @@ class Cipher:
 	
 	Stores the secret key and performs encryption and decryption operations as needed.
 
-	Caveat: this is a very simplified class. It merely ensures the confidentiality of 
-	data, but does not ensure authenticity (HMACs could be used to do so). Secret keys
-	are stored with the code itself in order to demonstrate the functionality, but should
-	be securely stored if used for a real system. Further, if the system was to be used with
+	Caveat: this is a very simplified class. Further, if the system was to be used with
 	multiple remote clients, it may be worth considering the use of asymmetric keys to 
 	reduce the chance of an attacker acquiring a key and, say, impersonating an administrator
 	who could set prices on this hypothetical system. There is a tradeoff however, symmetric 
@@ -18,29 +15,37 @@ class Cipher:
 	this application are large then such tradeoffs must be considered. If a secure element 
 	were to be available for key storage it could allow asymmetric cryptography to provide
 	the best of both worlds. 
+
+	Note: EAX is used to avoid padding the message and to simplify
+	the authentication of the message, but is a two pass approach so it will be 
+	slower than other modes. 
+
+	Attributes:
+		key (str): Secret key used for encrypting messages. 
 	"""
 
-	key = ''
-
 	def __init__(self):
+		self.key = None
 		self.retrieve_secret_key()
 
 	def create_secret_key(self):
-		"""Creates secret key and saves to file
+		"""Creates secret key and saves it to a file disk.
 		
-		Generates a 256 bit AES key and saves it to disk as secret.key
+		Generates a 128 bit AES key and saves it to disk as secret.key
+		As this is a symmetrical encryption scheme this key must be 
+		shared between the client and the server (securely). 
 		"""
-		key = os.urandom(32) 
+		key = os.urandom(16) 
 
 		with open('secret.key', 'wb') as f:
 			f.write(key)
 
-		print("Generated secret key %s" % key.hex())
+		print("Generated secret.key")
 
 		return key
 
 	def retrieve_secret_key(self):
-		"""Loads secret key into memory
+		"""Loads secret key into memory.
 
 		Checks disk for secret key and loads into memory. If the secret key 
 		does not exist, it is generated. 
@@ -48,46 +53,55 @@ class Cipher:
 
 		if os.path.isfile('secret.key'):
 			with open('secret.key', 'rb') as f:
-				self.key = f.read(32)
+				self.key = f.read(16)
 		else:
 			self.key = self.create_secret_key()
 
-		print("Retrieved secret key %s" % self.key.hex())
-
 	def encrypt(self, message):
-		"""Encrypts given message using secret key
+		"""Encrypts given message using secret key.
 		
-		Encrypts the message using AES256-CBC encryption.
+		Encrypts the message using AES128-EAX authenticated encryption.
+		Simulatenously provides authentication and privacy of message. 
+		Support messages of arbitrary length (i.e., no padding required).
 		
-		Arguments:
-			message {str} -- Text to be encrypted
+		Args:
+			message (bytes): Data to be encrypted.
 
 		Returns:
+			bytes: Ciphertext of the encrypted data.
+			bytes: Tag used to authenticate the ciphertext.
+			bytes: Number used only once, typically used to prevent replay attacks.
+		"""
 
-		""" 
+		cipher = AES.new(self.key, AES.MODE_EAX)
+		(ciphertext, tag) = cipher.encrypt_and_digest(message)
 
-		iv = get_random_bytes(AES.block_size)
-		padded_message = self.pad_message(message.encode('utf8'))
+		return (ciphertext, tag, cipher.nonce)
 
-		encrypter = AES.new(self.key, AES.MODE_CBC, iv)
-		ciphertext = encrypter.encrypt(padded_message)
+	def decrypt(self, ciphertext, tag, nonce):
+		"""Decrypts the given ciphertext using secret key. 
+		
+		Decrypts and verifies the ciphertext using AES128-EAX authenticated encryption.
+		
+		Args:
+			ciphertext (bytes): Result of encrypting some data with secret key. 
+			tag (bytes): Authentication tag used to verify data has not been tampered with. 
+			nonce (bytes): Number used only once, typically used to prevent replay attacks.
 
-		print(type(ciphertext))
-		print(type(iv))
+		Returns:
+			bytes: Plaintext of the decrypted data.
+		"""
 
-		return (ciphertext, iv)
+		cipher = AES.new(self.key, AES.MODE_EAX, nonce)
+		message = cipher.decrypt_and_verify(ciphertext, tag)
 
-	def pad_message(self, message):
-		if len(message) % AES.block_size == 0:
-			return message
-
-		# TODO: figure out the padding issue with AES256-CBC and get the encryption and 
-		# decryption working, then start using all of this to send messages between the client and server
-
-
+		return message
 
 if __name__ == '__main__':
 	cipher = Cipher()
-	cipher.retrieve_secret_key()
 
-	cipher.encrypt("testing!")
+	original_message = "testing!"
+	(ciphertext, tag, nonce) = cipher.encrypt(original_message.encode('utf8'))
+	decrypted_message = cipher.decrypt(ciphertext, tag, nonce).decode('utf8')
+
+	assert(original_message == decrypted_message)

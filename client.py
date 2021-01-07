@@ -2,13 +2,17 @@ from cmd import Cmd
 import getpass
 
 class ClientPrompt(Cmd):
-	"""Interface for user to interact with image repository
+	"""Interface for user to interact with image repository.
 	
 	Allows a user to manage the image repository. Use `help` to list
 	available commands. 
 	
-	Extends:
-		Cmd
+	Attributes:
+		prompt (str): Command prompt displayed to the user. 
+		intro (str): Welcome message displayed when the application is launched.
+		user (str): Initially an empty string until a user logs in, upon which 
+					it stores the username of the logged in user. 
+			  		Used as a proxy for identifying whether a user is logged in. 
 	"""
 
 	prompt = "image-repo> "
@@ -23,7 +27,7 @@ class ClientPrompt(Cmd):
 	verify_password = True
 
 	def do_view_cart(self, args):
-		"""Display contents of cart
+		"""Display contents of cart.
 		
 		Lists each item in the shopping cart along with quantity and price. 
 		Total is also listed. 
@@ -33,19 +37,19 @@ class ClientPrompt(Cmd):
 		print("To be implemented")
 
 	def do_add(self, path, price):
-		"""Adds an image (product) to Image Repository
+		"""Adds an image (product) to Image Repository.
 		
 		Uploads the image specified by path to the server along with the price.
 		
-		Arguments:
-			path {str} -- URL or local path to image file
-			price {float} -- cost of the image (product)
+		Args:
+			path (str): URL or local path to an image file.
+			price (float): Cost of the iamge (product).
 		"""
 
 		print("Adding image located at %s" % path)
 
 	def do_exit(self, args):
-		"""Exits the image repository
+		"""Exits the image repository.
 		
 		Exits the repository and loses current shopping cart. 
 		""" 
@@ -57,14 +61,14 @@ class ClientPrompt(Cmd):
 		raise SystemExit
 
 	def do_login(self, username):
-		"""Logs user in as given username
+		"""Logs user in as given username.
 		
 		Prompts user for the password associated with username. If the 
 		password is incorrect the command fails. Most commands for 
 		the repository don't function unless the user is logged in. 
 		
 		Arguments:
-			username {str} -- Username to log in as
+			username (str): Username to log in with.
 		""" 
 
 		#TODO: implement password checking that sends the password to 
