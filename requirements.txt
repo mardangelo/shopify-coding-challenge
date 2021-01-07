@@ -1,2 +1,1 @@
-lazyme==0.0.23
 pycryptodome==3.9.9

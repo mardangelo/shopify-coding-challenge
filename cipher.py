@@ -1,4 +1,5 @@
 import os
+import base64
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
@@ -100,8 +101,18 @@ class Cipher:
 if __name__ == '__main__':
 	cipher = Cipher()
 
+	# test encryption and decryption using text message 
 	original_message = "testing!"
 	(ciphertext, tag, nonce) = cipher.encrypt(original_message.encode('utf8'))
 	decrypted_message = cipher.decrypt(ciphertext, tag, nonce).decode('utf8')
-
 	assert(original_message == decrypted_message)
+
+	# test encryption and decryption using an image 
+	with open("shopify.png", 'rb') as image_file:
+		original_image = base64.b64encode(image_file.read())
+
+		(ciphertext, tag, nonce) = cipher.encrypt(original_image)
+		decrypted_image = cipher.decrypt(ciphertext, tag, nonce).decode('utf8')
+		assert(original_image == decrypted_image)
+
+
