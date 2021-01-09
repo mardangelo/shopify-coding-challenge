@@ -1,7 +1,14 @@
-from cmd import Cmd
-import getpass
 
-class ClientPrompt(Cmd):
+import cmd2
+from cmd2 import with_argparser
+from colorama import Fore, Style
+from util.communicator import Communicator
+import getpass
+import argparse
+from util.command import Command
+from util.status import Status
+
+class ClientPrompt(cmd2.Cmd):
 	"""Interface for user to interact with image repository.
 	
 	Allows a user to manage the image repository. Use `help` to list
@@ -15,18 +22,23 @@ class ClientPrompt(Cmd):
 			  		Used as a proxy for identifying whether a user is logged in. 
 	"""
 
-	prompt = "image-repo> "
-	intro = "Welcome to Image Repository. Type ? to list commands"
+	prompt =  ("{}" + "image-repo> " + "{}").format(Fore.GREEN, Style.RESET_ALL)
+	intro =  ("{}" + "Welcome to Image Repository. Type ? to list commands" 
+				+ "{}").format(Fore.BLUE, Style.RESET_ALL)
+	goodbye =  ("{}" + "Thank you for using Image Repository. Goodbye." 
+				+ "{}").format(Fore.BLUE, Style.RESET_ALL)
 
 	def __init__(self):
 		self.user = None 
+		self.communicator = Communicator()
+		super().__init__()
 
+	#TODO: for security, the server should remember what user has logged in so that someone
+	#	   cannot simply populate this field manually and magically gain access to the server.
 	def check_if_logged_in(self):
+		"""Checks if there is a user that has had their credentials verified by the server."""
 		if self.user == "":
 			print("User must be logged in for this command to function")
-
-	#TODO: make a server interaction class for the communication between client and server
-	verify_password = True
 
 	def do_view_cart(self, args):
 		"""Display contents of cart.
@@ -38,29 +50,29 @@ class ClientPrompt(Cmd):
 		self.check_if_logged_in()
 		print("To be implemented")
 
-	def do_add(self, path, price):
+	complete_add = cmd2.Cmd.path_complete
+
+	argparser_add = argparse.ArgumentParser()
+	argparser_add.add_argument('path', type=str)
+	argparser_add.add_argument('price', type=float)
+
+	@with_argparser(argparser_add)
+	def do_add(self, opts):
 		"""Adds an image (product) to Image Repository.
 		
 		Uploads the image specified by path to the server along with the price.
 		
-		Args:
+		Args: (within argument parser opts)
 			path (str): URL or local path to an image file.
 			price (float): Cost of the iamge (product).
 		"""
+		print(opts.path)
+		print(opts.price)
 
-		print("Adding image located at %s" % path)
+		# 1) load the file at path into memory
+		# 2) send the image to server (encrypt first)
 
-	def do_exit(self, args):
-		"""Exits the image repository.
-		
-		Exits the repository and loses current shopping cart. 
-		""" 
-
-		#TODO: implement a database extension that tracks shopping 
-		#cart state by user.
-
-		print("Thank you for using Image Repository. Goodbye.")
-		raise SystemExit
+		print("Not yet implemented")
 
 	def do_login(self, username):
 		"""Logs user in as given username.
@@ -72,21 +84,72 @@ class ClientPrompt(Cmd):
 		Arguments:
 			username (str): Username to log in with.
 		""" 
-
-		#TODO: implement password checking that sends the password to 
-		#the server (encrypted) and the server checks against a salted
-		#password that it has stored in the database.
-
-		if username == "":
-			print("Username must be provided as argument to login command")
-			return
-
 		print("Attempting to log in as %s" % username)
 		password = getpass.getpass()
+
+		self.send_command(Command.LOGIN)
 		
-		if self.verify_password == True: #TODO: call Server.verify_password(username,password)
+		if self.verify_password(username, password) == Status.SUCCESS:
 			self.user = username
 			print("Successfully logged in as %s" % username)
+
+	def send_command(self, command):
+		"""Sends a command to the server.
+		
+		Encodes the command as a string then encrypts it and sends it to 
+		the server. 
+		
+		Args:
+			command (Command): The command representing the operation to be performed. 
+		"""
+		self.communicator.encrypt_and_send(self.encode(command.value))
+
+	def encode(self, string):
+		"""Encodes a string as bytes.
+		
+		Encodes as string into it's utf8 representation as bytes. Converting the 
+		string to its byte representation is required for the encryption process. 
+		
+		Args:
+			string: The string to be encoded. 
+		
+		Returns:
+			bytes: Byte representation of the string. 
+		"""
+		return string.encode('utf8')
+
+	def verify_password(self, username, password):
+		"""Verifies the username and password with the server. 
+		
+		Sends encrypted versions of the username and password to the server and 
+		receives a result in return stating whether the combination was valid. 
+		
+		Args:
+			username: Username of the user attempting to log in. 
+			password: Password provided by the user attempting to log in. 
+		
+		Returns:
+			Status: Either SUCCESS or FAILURE depending on whether the username
+					password combination was valid. 
+		"""
+		self.communicator.encrypt_and_send(self.encode(username))
+		self.communicator.encrypt_and_send(self.encode(password))
+
+		result = self.communicator.receive_and_decrypt().decode('utf8')
+
+		return Status(result)
+
+	def do_exit(self, args):
+		"""Exits the image repository.
+		
+		Exits the repository and closes the connection to the server. 
+		""" 
+		print(self.goodbye)
+
+		self.socket.shutdown(socket.SHUT_RDWR)
+		self.socket.close()
+
+		raise SystemExit
 
 if __name__ == '__main__':
 	prompt = ClientPrompt()
