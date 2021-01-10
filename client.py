@@ -1,13 +1,16 @@
 
 import cmd2
 from cmd2 import with_argparser
-from colorama import Fore, Style
 from util.communicator import Communicator
 import getpass
 import argparse
 from util.command import Command
 from util.status import Status
 from lazyme.string import color_print, color_str
+from pathlib import Path
+from PIL import Image, UnidentifiedImageError
+from io import BytesIO
+import struct
 
 class ClientPrompt(cmd2.Cmd):
 	"""Interface for user to interact with image repository.
@@ -32,12 +35,13 @@ class ClientPrompt(cmd2.Cmd):
 		self.communicator = Communicator()
 		super().__init__()
 
-	#TODO: for security, the server should remember what user has logged in so that someone
-	#	   cannot simply populate this field manually and magically gain access to the server.
+	# TODO: flesh out this doc string
 	def check_if_logged_in(self):
 		"""Checks if there is a user that has had their credentials verified by the server."""
-		if self.user == "":
-			print("User must be logged in for this command to function")
+		is_not_logged_in = (self.user is None)
+		if is_not_logged_in:
+			color_print("User must be logged in for this command to function", color='orange')
+		return not is_not_logged_in
 
 	def do_create_user(self, username):
 		"""Creates a user with the given username.
@@ -102,6 +106,44 @@ class ClientPrompt(cmd2.Cmd):
 			# be required. 
 			color_print("Error: Failed to log in as %s" % username, color='red')
 
+	complete_add_image = cmd2.Cmd.path_complete
+
+	argparser_add_image = argparse.ArgumentParser()
+	argparser_add_image.add_argument('path', type=str)
+	argparser_add_image.add_argument('price', type=float)
+	argparser_add_image.add_argument('quantity', type=int)
+
+	@with_argparser(argparser_add_image)
+	def do_add_image(self, opts):
+		"""Adds an image (product) to Image Repository.
+		
+		Uploads the image specified by path to the server along with the price.
+		
+		Args: (within argument parser opts)
+			path (str): Path to an image file.
+			price (float): Cost of the image (product).
+			quantity (int): Quantity of the image (product) in the inventory.
+		"""
+		# if not self.check_if_logged_in():
+		# 	return 
+		
+		self.send_command(Command.ADD_IMAGE)
+
+		try:
+			with BytesIO() as output_image:
+				image_path = Path(opts.path)
+				with Image.open(opts.path) as source_image:
+					source_image.save(output_image, image_path.suffix.lstrip('.'))
+
+				self.communicator.encrypt_and_send(output_image.getvalue())
+				self.communicator.encrypt_and_send(image_path.name.encode('utf8'))
+				self.communicator.encrypt_and_send(struct.pack('>f', opts.price))
+				self.communicator.encrypt_and_send(opts.quantity.to_bytes(4, byteorder='big'))
+		except FileNotFoundError:
+			color_print("Error: Could not locate image at given path", color='red')
+		except UnidentifiedImageError:
+			color_print("Error: File could not be opened as an image", color='red')
+
 	def do_view_cart(self, args):
 		"""Display contents of cart.
 		
@@ -112,29 +154,16 @@ class ClientPrompt(cmd2.Cmd):
 		self.check_if_logged_in()
 		print("To be implemented")
 
-	complete_add = cmd2.Cmd.path_complete
-
-	argparser_add = argparse.ArgumentParser()
-	argparser_add.add_argument('path', type=str)
-	argparser_add.add_argument('price', type=float)
-
-	@with_argparser(argparser_add)
-	def do_add(self, opts):
-		"""Adds an image (product) to Image Repository.
+	def do_exit(self, args):
+		"""Exits the image repository.
 		
-		Uploads the image specified by path to the server along with the price.
-		
-		Args: (within argument parser opts)
-			path (str): URL or local path to an image file.
-			price (float): Cost of the iamge (product).
-		"""
-		print(opts.path)
-		print(opts.price)
+		Exits the repository and closes the connection to the server. 
+		""" 
+		print(self.goodbye)
 
-		# 1) load the file at path into memory
-		# 2) send the image to server (encrypt first)
+		self.communicator.shutdown()
 
-		print("Not yet implemented")
+		raise SystemExit
 
 	def send_command(self, command):
 		"""Sends a command to the server.
@@ -181,17 +210,6 @@ class ClientPrompt(cmd2.Cmd):
 		result = self.communicator.receive_and_decrypt().decode('utf8')
 
 		return Status(result)
-
-	def do_exit(self, args):
-		"""Exits the image repository.
-		
-		Exits the repository and closes the connection to the server. 
-		""" 
-		print(self.goodbye)
-
-		self.communicator.shutdown()
-
-		raise SystemExit
 
 if __name__ == '__main__':
 	prompt = ClientPrompt()

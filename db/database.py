@@ -94,3 +94,6 @@ class Database():
 
 		return result
 
+	def close_connection(self):
+		self.session.close()
+

@@ -146,5 +146,6 @@ class Communicator:
 		return data
 
 	def shutdown(self):
+		"""Severs the connection between client and server."""
 		self.socket.shutdown(socket.SHUT_RDWR)
 		self.socket.close()

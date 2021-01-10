@@ -6,6 +6,10 @@ from util.command import Command
 from util.status import Status
 from db.database import Database
 from lazyme.string import color_print
+from PIL import Image
+from io import BytesIO
+import struct
+from pathlib import Path
 
 HOST = '127.0.0.1'
 PORT = 65432
@@ -14,17 +18,24 @@ def main():
 	# use IPv4 and TCP
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 		s.bind((HOST, PORT))
-		s.listen()
 
-		(conn, addr) = s.accept()
+		while True:
+			s.listen()
 
-		with conn:
-			print("Connected to by ", addr)
+			(conn, addr) = s.accept()
 
-			commander = ServerCommander(conn)
+			with conn:
+				color_print("Connected to by %s" % str(addr), 'blue')
 
-			while True:
-				commander.receive_and_execute_command()
+				commander = ServerCommander(conn)
+
+				while True:
+					try: 
+						commander.receive_and_execute_command()
+					except ConnectionError:
+						commander.exit()
+						break
+
 				
 
 class ServerCommander():
@@ -82,6 +93,14 @@ class ServerCommander():
 		"""
 		self.commands[command]()
 
+	# TODO: flesh out this doc string
+	def check_if_logged_in(self):
+		"""Checks if there is a user that has logged in and can perform operations."""
+		is_not_logged_in = (self.username is None)
+		if is_not_logged_in:
+			color_print("User must be logged in to perform operations on the repository", color='orange')
+		return not is_not_logged_in
+
 	def create_user(self):
 		"""Creates a user using the credentials provided by the client.
 		
@@ -117,15 +136,42 @@ class ServerCommander():
 			self.communicator.encrypt_and_send(Status.FAILURE.value.encode('utf8'))
 
 	def add_image(self):
-		# receive the image being sent (optionally the URL?)
-		# receive the name of the image
-		# save the image to disk in an organized fashion
-		# compute the similarity vector using tensorflow
-		# add a database entry (image path, name, size - computed, similarity vector, image format, price)
+		"""Adds an image to the repository.
+		
+		Receives the encrypted image, filename, price, and quantity from the client
+		and saves the image to disk. The database is populated with the remaining information.
+		"""
+
+		#TODO: is there a reason why the image wouldn't be added succesfully? Should image names be unique?
+		# Or are similarity vectors the proper way to go?
+		
+		#TODO: compute the similarity vector using tensorflow
+		#TODO: add a database entry (image path, name, size - computed, similarity vector, image format, price)
 		# note: see if this can all be split up somehow? or if one table makes sense to store this information? 
 		# 		like price can be in a separate table to denote discounts somehow?
-		# 		
-		print("Not implemented")
+
+		# if not self.check_if_logged_in():
+		# 	return
+
+		image_bytes = BytesIO(self.communicator.receive_and_decrypt())
+		image_bytes.seek(0) # return file cursor to beginning of file
+		image = Image.open(image_bytes)
+		filename = self.communicator.receive_and_decrypt().decode('utf8')
+		price = struct.unpack('>f', self.communicator.receive_and_decrypt())
+		quantity = int.from_bytes(self.communicator.receive_and_decrypt(), byteorder='big')
+
+		# TODO: make this relative to main project directory if moved to another file?
+		# TODO: should I be able to retrieve images and display them somehow (image.show())
+		image_directory = Path("images") 
+		image_directory.mkdir(parents=True, exist_ok=True)
+
+		# sort of weird syntax for appending to a path object, uses '/' operator
+		image.save(image_directory / filename)
+
+	def exit(self):
+		"""Closes any open connections (e.g., database)."""
+		self.db.close_connection()
+		color_print("Client disconnected", 'blue')
 
 if __name__ == '__main__':
 	main()
