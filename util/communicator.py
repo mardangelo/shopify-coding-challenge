@@ -144,3 +144,7 @@ class Communicator:
 		self.acknowledge_receipt()
 
 		return data
+
+	def shutdown(self):
+		self.socket.shutdown(socket.SHUT_RDWR)
+		self.socket.close()

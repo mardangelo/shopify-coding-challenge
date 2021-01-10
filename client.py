@@ -7,7 +7,7 @@ import getpass
 import argparse
 from util.command import Command
 from util.status import Status
-from lazyme.string import color_print
+from lazyme.string import color_print, color_str
 
 class ClientPrompt(cmd2.Cmd):
 	"""Interface for user to interact with image repository.
@@ -23,13 +23,9 @@ class ClientPrompt(cmd2.Cmd):
 			  		Used as a proxy for identifying whether a user is logged in. 
 	"""
 
-	# TODO: create a script file with utility methods for formatting text?
-
-	prompt =  ("{}" + "image-repo> " + "{}").format(Fore.GREEN, Style.RESET_ALL)
-	intro =  ("{}" + "Welcome to Image Repository. Type ? to list commands" 
-				+ "{}").format(Fore.BLUE, Style.RESET_ALL)
-	goodbye =  ("{}" + "Thank you for using Image Repository. Goodbye." 
-				+ "{}").format(Fore.BLUE, Style.RESET_ALL)
+	prompt =  color_str("image-repo> ", 'green')
+	intro =  color_str("Welcome to Image Repository. Type ? to list commands", 'blue')
+	goodbye =  color_str("Thank you for using Image Repository. Goodbye.", 'blue')
 
 	def __init__(self):
 		self.user = None 
@@ -184,8 +180,7 @@ class ClientPrompt(cmd2.Cmd):
 		""" 
 		print(self.goodbye)
 
-		self.socket.shutdown(socket.SHUT_RDWR)
-		self.socket.close()
+		self.communicator.shutdown()
 
 		raise SystemExit
 
