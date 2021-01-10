@@ -34,6 +34,7 @@ class ServerCommander():
 	appropriate method.
 	
 	Attributes:
+		username (str): The name of the currently logged in user.
 		commands (dict{str -> func}): Mapping of string command to function. 
 		communicator (Communicator): Manages encrypted communciation between client and server. 
 		db (Database): Manages operations on the database.
@@ -48,6 +49,8 @@ class ServerCommander():
 		Args:
 			connection (Socket): The established connection between client and server. 
 		"""
+		self.username = None
+
 		self.communicator = Communicator(connection)
 
 		self.commands = {
@@ -85,12 +88,14 @@ class ServerCommander():
 		Receives the username and password from the client and stores a salted 
 		and hashed version of the password in the database if the username does 
 		not already exist. If the user already exists in the database, FAILURE 
-		is sent to the client, else a SUCCESS signal is sent. 
+		is sent to the client, else a SUCCESS signal is sent. Once a user is 
+		created they are automatically logged in.
 		"""
 		username = self.communicator.receive_and_decrypt().decode('utf8')
 		password = self.communicator.receive_and_decrypt().decode('utf8')
 
-		if (self.db.create_user(username, password)):
+		if self.db.create_user(username, password):
+			self.username = username
 			self.communicator.encrypt_and_send(Status.SUCCESS.value.encode('utf8'))
 		else: 
 			self.communicator.encrypt_and_send(Status.FAILURE.value.encode('utf8'))
@@ -105,12 +110,11 @@ class ServerCommander():
 		username = self.communicator.receive_and_decrypt().decode('utf8')
 		password = self.communicator.receive_and_decrypt().decode('utf8')
 
-		# TODO: replace this always valid code with actual check
-		self.communicator.encrypt_and_send(Status.SUCCESS.value.encode('utf8'))
-
-		# check the database for the username and pull the salted password
-		# salt the current password and compare
-		# send a message back to the client denoting success or failure
+		if self.db.verify_user(username, password):
+			self.username = username
+			self.communicator.encrypt_and_send(Status.SUCCESS.value.encode('utf8'))
+		else: 
+			self.communicator.encrypt_and_send(Status.FAILURE.value.encode('utf8'))
 
 	def add_image(self):
 		# receive the image being sent (optionally the URL?)

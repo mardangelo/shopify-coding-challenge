@@ -23,9 +23,9 @@ class ClientPrompt(cmd2.Cmd):
 			  		Used as a proxy for identifying whether a user is logged in. 
 	"""
 
-	prompt =  color_str("image-repo> ", 'green')
-	intro =  color_str("Welcome to Image Repository. Type ? to list commands", 'blue')
-	goodbye =  color_str("Thank you for using Image Repository. Goodbye.", 'blue')
+	prompt =  color_str("image-repo> ", color='green')
+	intro =  color_str("Welcome to Image Repository. Type ? to list commands", color='blue')
+	goodbye =  color_str("Thank you for using Image Repository. Goodbye.", color='blue')
 
 	def __init__(self):
 		self.user = None 
@@ -54,7 +54,7 @@ class ClientPrompt(cmd2.Cmd):
 			color_print("Must provide a username", color='red')
 			return
 
-		print("Attempting to create user %s" % username)
+		color_print("Attempting to create user %s" % username, 'blue')
 		password = getpass.getpass()
 
 		self.send_command(Command.CREATE_USER)
@@ -83,7 +83,7 @@ class ClientPrompt(cmd2.Cmd):
 			color_print("Must provide a username", color='red')
 			return
 
-		print("Attempting to log in as %s" % username)
+		color_print("Attempting to log in as %s" % username, color='blue')
 
 		password = getpass.getpass()
 
@@ -91,7 +91,16 @@ class ClientPrompt(cmd2.Cmd):
 		
 		if self.verify_password(username, password) == Status.SUCCESS:
 			self.user = username
-			print("Successfully logged in as %s" % username)
+			color_print("Successfully logged in as %s" % username, color='blue')
+		else:
+			# Note: failure could be owed to two reasons: (1) incorrect password, 
+			# (2) user doesn't exist. It is intentional that the status of a user
+			# not be revealed - as is standard when usernames can be global
+			# identifiers such as emails, etc. It would be trivial to enhance
+			# the Status codes to specifically specify INCORRECT_PASSWORD and
+			# USER_DOES_NOT_EXIST should confidentiality of existing users not
+			# be required. 
+			color_print("Error: Failed to log in as %s" % username, color='red')
 
 	def do_view_cart(self, args):
 		"""Display contents of cart.

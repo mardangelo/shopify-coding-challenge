@@ -50,8 +50,8 @@ class Database():
 			bool: Whether the user was created successfully or not.
 		"""
 		(user_exists, ) = self.session.query(exists().where(User.username == username))
-		if user_exists[0] == True:
-			color_print("Username %s is already in use" % username, color='red')
+		if user_exists[0]:
+			color_print("Error: Username %s is already in use" % username, color='red')
 			return False
 
 		hash = pbkdf2_sha256.hash(password)
@@ -77,6 +77,20 @@ class Database():
 		Returns:
 			bool: True if the credentials matched, else False.
 		"""
+		(user_exists, ) = self.session.query(exists().where(User.username == username))
+		if not user_exists[0]:
+			color_print("Error: User %s does not exist" % username, color='red')
+			return False
+
+		# There will be exactly one row for the username because usernames are 
+		# constrained to be unique by the database
 		user_info = self.session.query(User).filter(User.username == username).one()
-		return pbkdf2_sha256.verify(password, user_info.password)
+		result = pbkdf2_sha256.verify(password, user_info.password)
+
+		if result:
+			color_print("User credentials match those stored in the database.", color='blue')
+		else: 
+			color_print("Error: User credentials are not a match", color='red')
+
+		return result
 
