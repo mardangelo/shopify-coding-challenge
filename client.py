@@ -7,6 +7,7 @@ import getpass
 import argparse
 from util.command import Command
 from util.status import Status
+from lazyme.string import color_print
 
 class ClientPrompt(cmd2.Cmd):
 	"""Interface for user to interact with image repository.
@@ -21,6 +22,8 @@ class ClientPrompt(cmd2.Cmd):
 					it stores the username of the logged in user. 
 			  		Used as a proxy for identifying whether a user is logged in. 
 	"""
+
+	# TODO: create a script file with utility methods for formatting text?
 
 	prompt =  ("{}" + "image-repo> " + "{}").format(Fore.GREEN, Style.RESET_ALL)
 	intro =  ("{}" + "Welcome to Image Repository. Type ? to list commands" 
@@ -39,6 +42,60 @@ class ClientPrompt(cmd2.Cmd):
 		"""Checks if there is a user that has had their credentials verified by the server."""
 		if self.user == "":
 			print("User must be logged in for this command to function")
+
+	def do_create_user(self, username):
+		"""Creates a user with the given username.
+		
+		Prompts the user for the password to be associated with the username. 
+		The username and password are encrypted and sent to the server where 
+		they are stored in the database. Note: the password is not stored as 
+		plaintext in that database, a salted hashed version is stored instead. 
+		
+		Args:
+			username (str): Username of the user to be created. 
+		"""
+		if username == "":
+			color_print("Must provide a username", color='red')
+			return
+
+		print("Attempting to create user %s" % username)
+		password = getpass.getpass()
+
+		self.send_command(Command.CREATE_USER)
+
+		self.communicator.encrypt_and_send(self.encode(username))
+		self.communicator.encrypt_and_send(self.encode(password))
+
+		result = self.communicator.receive_and_decrypt().decode('utf8')
+
+		if Status(result) == Status.SUCCESS:
+			color_print("Successfully created user %s" % username, color='blue')
+		else: 
+			color_print("Error: User already exists", color='red')
+
+	def do_login(self, username):
+		"""Logs user in as given username.
+		
+		Prompts user for the password associated with username. If the 
+		password is incorrect the command fails. Most commands for 
+		the repository don't function unless the user is logged in. 
+		
+		Arguments:
+			username (str): Username to log in with.
+		""" 
+		if username == "":
+			color_print("Must provide a username", color='red')
+			return
+
+		print("Attempting to log in as %s" % username)
+
+		password = getpass.getpass()
+
+		self.send_command(Command.LOGIN)
+		
+		if self.verify_password(username, password) == Status.SUCCESS:
+			self.user = username
+			print("Successfully logged in as %s" % username)
 
 	def do_view_cart(self, args):
 		"""Display contents of cart.
@@ -73,25 +130,6 @@ class ClientPrompt(cmd2.Cmd):
 		# 2) send the image to server (encrypt first)
 
 		print("Not yet implemented")
-
-	def do_login(self, username):
-		"""Logs user in as given username.
-		
-		Prompts user for the password associated with username. If the 
-		password is incorrect the command fails. Most commands for 
-		the repository don't function unless the user is logged in. 
-		
-		Arguments:
-			username (str): Username to log in with.
-		""" 
-		print("Attempting to log in as %s" % username)
-		password = getpass.getpass()
-
-		self.send_command(Command.LOGIN)
-		
-		if self.verify_password(username, password) == Status.SUCCESS:
-			self.user = username
-			print("Successfully logged in as %s" % username)
 
 	def send_command(self, command):
 		"""Sends a command to the server.
