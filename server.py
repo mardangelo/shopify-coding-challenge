@@ -4,6 +4,8 @@ import socket
 from util.communicator import Communicator
 from util.command import Command
 from util.status import Status
+from db.database import Database
+from lazyme.string import color_print
 
 HOST = '127.0.0.1'
 PORT = 65432
@@ -34,6 +36,7 @@ class ServerCommander():
 	Attributes:
 		commands (dict{str -> func}): Mapping of string command to function. 
 		communicator (Communicator): Manages encrypted communciation between client and server. 
+		db (Database): Manages operations on the database.
 	"""
 
 	def __init__(self, connection):
@@ -49,8 +52,11 @@ class ServerCommander():
 
 		self.commands = {
 			Command.LOGIN.value : self.login, 
-			Command.ADD_IMAGE.value : self.add_image
+			Command.ADD_IMAGE.value : self.add_image,
+			Command.CREATE_USER.value: self.create_user
 		}
+
+		self.db = Database()
 
 	def receive_and_execute_command(self):
 		"""Receives a command from the server and executes it.
@@ -73,6 +79,22 @@ class ServerCommander():
 		"""
 		self.commands[command]()
 
+	def create_user(self):
+		"""Creates a user using the credentials provided by the client.
+		
+		Receives the username and password from the client and stores a salted 
+		and hashed version of the password in the database if the username does 
+		not already exist. If the user already exists in the database, FAILURE 
+		is sent to the client, else a SUCCESS signal is sent. 
+		"""
+		username = self.communicator.receive_and_decrypt().decode('utf8')
+		password = self.communicator.receive_and_decrypt().decode('utf8')
+
+		if (self.db.create_user(username, password)):
+			self.communicator.encrypt_and_send(Status.SUCCESS.value.encode('utf8'))
+		else: 
+			self.communicator.encrypt_and_send(Status.FAILURE.value.encode('utf8'))
+
 	def login(self):
 		"""Verifies the credentials of a user attempting to log in. 
 		
@@ -80,8 +102,6 @@ class ServerCommander():
 		salted so that it can be compared to the salted copy in the database. (The 
 		database should never store a plaintext password)
 		"""
-		print("User is attempting to login")
-
 		username = self.communicator.receive_and_decrypt().decode('utf8')
 		password = self.communicator.receive_and_decrypt().decode('utf8')
 
