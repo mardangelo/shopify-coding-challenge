@@ -40,7 +40,7 @@ class ClientPrompt(cmd2.Cmd):
 		"""Checks if there is a user that has had their credentials verified by the server."""
 		is_not_logged_in = (self.user is None)
 		if is_not_logged_in:
-			color_print("User must be logged in for this command to function", color='orange')
+			color_print("User must be logged in for this command to function", color='magenta')
 		return not is_not_logged_in
 
 	def do_create_user(self, username):
@@ -113,6 +113,7 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_add_image.add_argument('price', type=float)
 	argparser_add_image.add_argument('quantity', type=int)
 
+	#TODO: take a directory as an argument and loop to do all of the processing
 	@with_argparser(argparser_add_image)
 	def do_add_image(self, opts):
 		"""Adds an image (product) to Image Repository.

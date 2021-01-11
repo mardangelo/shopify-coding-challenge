@@ -10,6 +10,7 @@ from PIL import Image
 from io import BytesIO
 import struct
 from pathlib import Path
+import util.similarity as tf
 
 HOST = '127.0.0.1'
 PORT = 65432
@@ -98,7 +99,7 @@ class ServerCommander():
 		"""Checks if there is a user that has logged in and can perform operations."""
 		is_not_logged_in = (self.username is None)
 		if is_not_logged_in:
-			color_print("User must be logged in to perform operations on the repository", color='orange')
+			color_print("User must be logged in to perform operations on the repository", color='magenta')
 		return not is_not_logged_in
 
 	def create_user(self):
@@ -141,23 +142,17 @@ class ServerCommander():
 		Receives the encrypted image, filename, price, and quantity from the client
 		and saves the image to disk. The database is populated with the remaining information.
 		"""
-
 		#TODO: is there a reason why the image wouldn't be added succesfully? Should image names be unique?
 		# Or are similarity vectors the proper way to go?
-		
-		#TODO: compute the similarity vector using tensorflow
-		#TODO: add a database entry (image path, name, size - computed, similarity vector, image format, price)
-		# note: see if this can all be split up somehow? or if one table makes sense to store this information? 
-		# 		like price can be in a separate table to denote discounts somehow?
 
-		# if not self.check_if_logged_in():
-		# 	return
+		if not self.check_if_logged_in():
+			return
 
 		image_bytes = BytesIO(self.communicator.receive_and_decrypt())
 		image_bytes.seek(0) # return file cursor to beginning of file
 		image = Image.open(image_bytes)
 		filename = self.communicator.receive_and_decrypt().decode('utf8')
-		price = struct.unpack('>f', self.communicator.receive_and_decrypt())
+		cost = struct.unpack('>f', self.communicator.receive_and_decrypt())
 		quantity = int.from_bytes(self.communicator.receive_and_decrypt(), byteorder='big')
 
 		# TODO: make this relative to main project directory if moved to another file?
@@ -167,6 +162,14 @@ class ServerCommander():
 
 		# sort of weird syntax for appending to a path object, uses '/' operator
 		image.save(image_directory / filename)
+		
+		feature_tensor = tf.calculate_feature_vector(str(image_directory / filename))
+		serialized_tensor = tf.serialize_feature_vector(feature_tensor)
+
+		self.db.add_image(str(image_directory / filename), serialized_tensor, quantity, cost)
+		
+		#TODO: move nearest neighbour computation to search function
+		#tf.compute_nearest_neighbours(feature_tensor, self.db.get_feature_vectors())
 
 	def exit(self):
 		"""Closes any open connections (e.g., database)."""

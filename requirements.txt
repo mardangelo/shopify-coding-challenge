@@ -1,6 +1,11 @@
+annoy==1.17.0
 cmd2==1.4.0
+gnureadline==8.0.0
 lazyme==0.0.23
 passlib==1.7.4
 Pillow==8.1.0
 pycryptodome==3.9.9
+scipy==1.6.0
 SQLAlchemy==1.3.22
+tensorflow==2.4.0
+tensorflow-hub==0.11.0

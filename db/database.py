@@ -7,8 +7,11 @@ from lazyme.string import color_print
 
 from passlib.hash import pbkdf2_sha256
 
-from .table.user import User
 from .table.base import Base
+from .table.user import User
+from .table.image import Image
+
+import util.similarity as tf
 
 class Database():
 	"""Utility class for managing the database.
@@ -88,12 +91,62 @@ class Database():
 		result = pbkdf2_sha256.verify(password, user_info.password)
 
 		if result:
-			color_print("User credentials match those stored in the database.", color='blue')
+			color_print("User credentials match those stored in the database", color='blue')
 		else: 
 			color_print("Error: User credentials are not a match", color='red')
 
 		return result
 
+	#TODO: ponder whether the best comparison would be feature vector or path? what is the
+	#	   likelihood of a feature vector being repeated?
+	def add_image(self, path, feature_vector, quantity, cost):
+		"""Adds an image to the repository. 
+		
+		Stores information about the image as well as a path to the image file. If an image
+		by the same name already exists in the database it is not added again. 
+		
+		Args:
+			path (str): Path to the image file on disk. 
+			feature_vector (bytes): A feature tensor in byte format.  
+			quantity (int): The quantity of the image in stock. 
+			cost (float): Price of one image (product).
+
+		Returns:
+			bool: True if image was added, false if the image already exists. 
+		"""
+		(image_exists, ) = self.session.query(exists().where(Image.image_path == path))
+		if image_exists[0]:
+			color_print("Warning: Image %s already exists in database, skipping." % path, color='magenta')
+			return False
+
+		image = Image(image_path=path, feature_vector=feature_vector, quantity=quantity, cost=cost)
+		self.session.add(image)
+		self.session.commit()
+
+		color_print("Image successfully added to database", color='blue')
+
+		return True
+
+	def get_feature_vectors(self):
+		"""Retrieves the feature vectors of all images.
+		
+		Queries the database for all feature vectors and deserializes them into 
+		Tensor objects. 
+		
+		Returns:
+			list((int,Tensor)): A list of pairs of image identifiers and feature vectors.
+		"""
+		result = self.session.query(Image.id, Image.feature_vector).all()
+
+		transformed_result = list()
+		
+		for (id, serialized_feature_vector) in result:
+			deserialized_tensor = tf.deserialize_feature_vector(serialized_feature_vector)
+			transformed_result.append((id, deserialized_tensor))
+
+		return transformed_result
+
 	def close_connection(self):
+		"""Ends the session with the database"""
 		self.session.close()
 
