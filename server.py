@@ -2,8 +2,8 @@
 
 import socket
 from util.communicator import Communicator
-from util.command import Command
-from util.status import Status
+from util.enum.command import Command
+from util.enum.status import Status
 from db.database import Database
 from lazyme.string import color_print
 from PIL import Image
@@ -152,8 +152,9 @@ class ServerCommander():
 		image_bytes.seek(0) # return file cursor to beginning of file
 		image = Image.open(image_bytes)
 		filename = self.communicator.receive_and_decrypt().decode('utf8')
-		cost = struct.unpack('>f', self.communicator.receive_and_decrypt())
+		cost = struct.unpack('>f', self.communicator.receive_and_decrypt())[0]
 		quantity = int.from_bytes(self.communicator.receive_and_decrypt(), byteorder='big')
+		tag_selection = list(self.communicator.receive_and_decrypt())
 
 		# TODO: make this relative to main project directory if moved to another file?
 		# TODO: should I be able to retrieve images and display them somehow (image.show())
@@ -166,7 +167,13 @@ class ServerCommander():
 		feature_tensor = tf.calculate_feature_vector(str(image_directory / filename))
 		serialized_tensor = tf.serialize_feature_vector(feature_tensor)
 
-		self.db.add_image(str(image_directory / filename), serialized_tensor, quantity, cost)
+		image_id = self.db.add_image(str(image_directory / filename), serialized_tensor, quantity, cost, self.username)
+		
+		if image_id is None:
+			color_print("Image could not be added because it already exists", color='red')
+			return
+
+		self.db.add_tags(image_id, tag_selection)
 		
 		#TODO: move nearest neighbour computation to search function
 		#tf.compute_nearest_neighbours(feature_tensor, self.db.get_feature_vectors())

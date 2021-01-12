@@ -4,13 +4,17 @@ from cmd2 import with_argparser
 from util.communicator import Communicator
 import getpass
 import argparse
-from util.command import Command
-from util.status import Status
+from util.enum.command import Command
+from util.enum.status import Status
+from util.enum.tags import Tags
 from lazyme.string import color_print, color_str
 from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 import struct
+
+#TODO: rename util to shared?
+#TODO: create a demo database so they don't have to upload files with prices and tags, etc.
 
 class ClientPrompt(cmd2.Cmd):
 	"""Interface for user to interact with image repository.
@@ -113,7 +117,6 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_add_image.add_argument('price', type=float)
 	argparser_add_image.add_argument('quantity', type=int)
 
-	#TODO: take a directory as an argument and loop to do all of the processing
 	@with_argparser(argparser_add_image)
 	def do_add_image(self, opts):
 		"""Adds an image (product) to Image Repository.
@@ -125,8 +128,13 @@ class ClientPrompt(cmd2.Cmd):
 			price (float): Cost of the image (product).
 			quantity (int): Quantity of the image (product) in the inventory.
 		"""
-		# if not self.check_if_logged_in():
-		# 	return 
+
+		if not self.check_if_logged_in():
+			return 
+
+		Tags.display_tags_for_selection()
+		selection_raw = input(color_str("Enter the number(s) of the relevant tag(s): ", color='green'))
+		selection = [int(s) for s in selection_raw.split(',') if s.isdigit()]
 		
 		self.send_command(Command.ADD_IMAGE)
 
@@ -134,12 +142,15 @@ class ClientPrompt(cmd2.Cmd):
 			with BytesIO() as output_image:
 				image_path = Path(opts.path)
 				with Image.open(opts.path) as source_image:
-					source_image.save(output_image, image_path.suffix.lstrip('.'))
+					# jpeg can have two extensions, but only one is valid for PIL (jpeg)
+					extension = image_path.suffix.lstrip('.')
+					source_image.save(output_image, 'jpeg' if extension.lower() == 'jpg' else extension)
 
 				self.communicator.encrypt_and_send(output_image.getvalue())
 				self.communicator.encrypt_and_send(image_path.name.encode('utf8'))
 				self.communicator.encrypt_and_send(struct.pack('>f', opts.price))
 				self.communicator.encrypt_and_send(opts.quantity.to_bytes(4, byteorder='big'))
+				self.communicator.encrypt_and_send(bytes(selection))
 		except FileNotFoundError:
 			color_print("Error: Could not locate image at given path", color='red')
 		except UnidentifiedImageError:

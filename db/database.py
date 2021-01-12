@@ -10,6 +10,10 @@ from passlib.hash import pbkdf2_sha256
 from .table.base import Base
 from .table.user import User
 from .table.image import Image
+from .table.image_tag import ImageTag
+from .table.tag import Tag
+
+from util.enum.tags import Tags 
 
 import util.similarity as tf
 
@@ -37,6 +41,16 @@ class Database():
 
 		# creates all tables that are "visible" (e.g., imported) 
 		Base.metadata.create_all(bind=engine)
+
+		if not self.session.query(Tag).first():
+			self.initialize_tags()
+
+	def initialize_tags(self):
+		"""Initializes the Tag table with tags defined in the Tags enum."""
+		for tag_enum in Tags:
+			tag = Tag(id=tag_enum.value, description=tag_enum.name)
+			self.session.add(tag)
+			self.session.commit()
 
 	def create_user(self, username, password):
 		"""Creates a user.
@@ -99,7 +113,7 @@ class Database():
 
 	#TODO: ponder whether the best comparison would be feature vector or path? what is the
 	#	   likelihood of a feature vector being repeated?
-	def add_image(self, path, feature_vector, quantity, cost):
+	def add_image(self, path, feature_vector, quantity, cost, username):
 		"""Adds an image to the repository. 
 		
 		Stores information about the image as well as a path to the image file. If an image
@@ -112,20 +126,37 @@ class Database():
 			cost (float): Price of one image (product).
 
 		Returns:
-			bool: True if image was added, false if the image already exists. 
+			int: Database id if image was added, None if the image already exists. 
 		"""
 		(image_exists, ) = self.session.query(exists().where(Image.image_path == path))
 		if image_exists[0]:
 			color_print("Warning: Image %s already exists in database, skipping." % path, color='magenta')
-			return False
+			return None
 
-		image = Image(image_path=path, feature_vector=feature_vector, quantity=quantity, cost=cost)
+		image = Image(image_path=path, feature_vector=feature_vector, quantity=quantity, cost=cost, seller=username)
 		self.session.add(image)
 		self.session.commit()
 
 		color_print("Image successfully added to database", color='blue')
 
-		return True
+		return image.id
+
+	def add_tags(self, image_id, tags):
+		"""Associate the given tags with the image in the database.
+		
+		Insert pairs of (image_id, tag_id) into the database by iterating over the 
+		given list of tag identifiers.
+		
+		Args:
+			image_id (int): The database id of the image to add tags for.
+			tags (list(int)): A list of tags ids to associate with the image.
+		"""
+
+		for tag in tags:
+			image_tag = ImageTag(image_id=image_id, tag_id=tag)
+			self.session.add(image_tag)
+
+		self.session.commit()
 
 	def get_feature_vectors(self):
 		"""Retrieves the feature vectors of all images.
