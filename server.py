@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 
 import socket
+
+from lazyme.string import color_print
+from pathlib import Path
+
+from db.database import Database
+
 from util.communicator import Communicator
 from util.enum.command import Command
 from util.enum.status import Status
-from db.database import Database
-from lazyme.string import color_print
-from PIL import Image
-from io import BytesIO
-import struct
-from pathlib import Path
+
 import util.similarity as tf
 
 HOST = '127.0.0.1'
@@ -68,7 +69,8 @@ class ServerCommander():
 		self.commands = {
 			Command.LOGIN.value : self.login, 
 			Command.ADD_IMAGE.value : self.add_image,
-			Command.CREATE_USER.value: self.create_user
+			Command.CREATE_USER.value: self.create_user, 
+			Command.SEARCH_BY_IMAGE.value: self.search_by_image
 		}
 
 		self.db = Database()
@@ -79,8 +81,7 @@ class ServerCommander():
 		Receives and decrypts a command from the client and determines the correct 
 		method to execute the command. 
 		"""
-		command = self.communicator.receive_and_decrypt()
-		self.dispatch_command(command.decode('utf8'))
+		self.dispatch_command(self.communicator.receive_string())
 
 	def dispatch_command(self, command):
 		"""Dispatches a command to the appropriate method. 
@@ -111,14 +112,14 @@ class ServerCommander():
 		is sent to the client, else a SUCCESS signal is sent. Once a user is 
 		created they are automatically logged in.
 		"""
-		username = self.communicator.receive_and_decrypt().decode('utf8')
-		password = self.communicator.receive_and_decrypt().decode('utf8')
+		username = self.communicator.receive_string()
+		password = self.communicator.receive_string()
 
 		if self.db.create_user(username, password):
 			self.username = username
-			self.communicator.encrypt_and_send(Status.SUCCESS.value.encode('utf8'))
+			self.communicator.send_enum(Status.SUCCESS)
 		else: 
-			self.communicator.encrypt_and_send(Status.FAILURE.value.encode('utf8'))
+			self.communicator.send_enum(Status.FAILURE)
 
 	def login(self):
 		"""Verifies the credentials of a user attempting to log in. 
@@ -127,14 +128,14 @@ class ServerCommander():
 		salted so that it can be compared to the salted copy in the database. (The 
 		database should never store a plaintext password)
 		"""
-		username = self.communicator.receive_and_decrypt().decode('utf8')
-		password = self.communicator.receive_and_decrypt().decode('utf8')
+		username = self.communicator.receive_string()
+		password = self.communicator.receive_string()
 
 		if self.db.verify_user(username, password):
 			self.username = username
-			self.communicator.encrypt_and_send(Status.SUCCESS.value.encode('utf8'))
+			self.communicator.send_enum(Status.SUCCESS)
 		else: 
-			self.communicator.encrypt_and_send(Status.FAILURE.value.encode('utf8'))
+			self.communicator.send_enum(Status.FAILURE)
 
 	def add_image(self):
 		"""Adds an image to the repository.
@@ -148,35 +149,98 @@ class ServerCommander():
 		if not self.check_if_logged_in():
 			return
 
-		image_bytes = BytesIO(self.communicator.receive_and_decrypt())
-		image_bytes.seek(0) # return file cursor to beginning of file
-		image = Image.open(image_bytes)
-		filename = self.communicator.receive_and_decrypt().decode('utf8')
-		cost = struct.unpack('>f', self.communicator.receive_and_decrypt())[0]
-		quantity = int.from_bytes(self.communicator.receive_and_decrypt(), byteorder='big')
-		tag_selection = list(self.communicator.receive_and_decrypt())
+		(image, filename) = self.receive_image()
 
-		# TODO: make this relative to main project directory if moved to another file?
-		# TODO: should I be able to retrieve images and display them somehow (image.show())
-		image_directory = Path("images") 
-		image_directory.mkdir(parents=True, exist_ok=True)
+		cost = receive_float()
+		quantity = receive_int()
+		tag_selection = self.communicator.receive_list()
 
-		# sort of weird syntax for appending to a path object, uses '/' operator
-		image.save(image_directory / filename)
+		image_path = self.save_image_to_directory("images", image, filename)
 		
-		feature_tensor = tf.calculate_feature_vector(str(image_directory / filename))
+		feature_tensor = tf.calculate_feature_vector(str(image_path))
 		serialized_tensor = tf.serialize_feature_vector(feature_tensor)
 
-		image_id = self.db.add_image(str(image_directory / filename), serialized_tensor, quantity, cost, self.username)
+		image_id = self.db.add_image(str(image_path), serialized_tensor, quantity, cost, self.username)
 		
 		if image_id is None:
 			color_print("Image could not be added because it already exists", color='red')
 			return
 
 		self.db.add_tags(image_id, tag_selection)
+
+	def search_by_image(self):
+		"""Searches images (products) similar to the provided image.
 		
-		#TODO: move nearest neighbour computation to search function
-		#tf.compute_nearest_neighbours(feature_tensor, self.db.get_feature_vectors())
+		Receives an image from the client, computes a feature vector, and computes 
+		the nearest neighbours of the image within the image repository. 
+		"""
+		if not self.check_if_logged_in():
+			return
+
+		(image, filename) = self.receive_image()
+
+		# tensorflow wants to load images off disk, so let's store it there temporarily
+		image_path = self.save_image_to_directory("temp", image, filename)
+		
+		feature_tensor = tf.calculate_feature_vector(str(image_path))
+
+		# clean up the temporary file
+		image_path.unlink()
+
+		neighbours = tf.compute_nearest_neighbours(feature_tensor, self.db.get_feature_vectors())
+
+		# first send the client the number of neighbours to expect, then send them individually
+		self.communicator.send_int(len(neighbours))
+		for neighbour in neighbours:
+			self.send_image_to_client(neighbour)
+
+	def send_image_to_client(self, image_id):
+		(image_path, quantity, cost) = self.db.get_image_attributes(image_id)
+
+		color_print(str((image_path, quantity, cost)), color='green')
+
+		self.communicator.send_image(image_path)
+		self.communicator.send_string(image_path.name)
+		self.communicator.send_float(cost)
+		self.communicator.send_int(quantity)
+
+	def save_image_to_directory(self, directory, image, filename):
+		"""Saves an image into a directory.
+		
+		Creates a directory if it does not exist and saves the provided image under 
+		as the given filename into said directory.
+		
+		Args:
+			directory (str): The path to the directory (or simply a name).
+			image (Image): The image being saved to disk. 
+			filename (str): The filename to be used to save the image.
+		
+		Returns:
+			Path: path to the saved image file.
+		"""
+		# TODO: make this relative to main project directory if moved to another file?
+		# TODO: should I be able to retrieve images and display them somehow (image.show())
+		image_directory = Path(directory) 
+		image_directory.mkdir(parents=True, exist_ok=True)
+		image_path = image_directory / filename # append to path, uses '/' operator
+		image.save(image_path) 
+
+		return image_path
+
+	def receive_image(self):
+		"""Receives an image from the client.
+		
+		Receives the byte representation of the image from the client and decodes it. 
+		Also receives the filename of the image. 
+
+		Returns:
+			Image: A PIL image.
+			str: The filename of the image.
+		"""
+		image = self.communicator.receive_image()
+		filename = self.communicator.receive_string()
+
+		return (image, filename)
 
 	def exit(self):
 		"""Closes any open connections (e.g., database)."""

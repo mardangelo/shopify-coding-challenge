@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from sqlalchemy import create_engine, MetaData
 from sqlalchemy.sql import exists
 from sqlalchemy.orm import sessionmaker
@@ -157,6 +159,28 @@ class Database():
 			self.session.add(image_tag)
 
 		self.session.commit()
+
+	#TODO: do some error checking if the image id isn't valid for whatever reason?
+	def get_image_attributes(self, image_id):
+		"""Retrieves information about an image given its id.
+		
+		Queries the database for the path of the image, the amount in stock, and the cost.
+		
+		Args:
+			image_id (int): The database identifier of the image.
+
+		Returns:
+			str: The path to the image on disk.
+			int: The number of items in stock.
+			float: The cost of each individual item.
+		"""
+		(result, ) = self.session.query(Image.image_path, Image.quantity, Image.cost).filter(Image.id == image_id)
+
+		path = Path(result[0])
+		quantity = result[1]
+		cost = round(result[2], 2)
+
+		return (path, quantity, cost)
 
 	def get_feature_vectors(self):
 		"""Retrieves the feature vectors of all images.

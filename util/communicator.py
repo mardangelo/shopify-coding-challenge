@@ -1,4 +1,12 @@
 import socket 
+
+from pathlib import Path
+from PIL import Image, UnidentifiedImageError
+from io import BytesIO
+import struct
+
+from lazyme.string import color_print
+
 from .cipher import Cipher
 
 class Communicator:
@@ -54,7 +62,156 @@ class Communicator:
 
 		return server_socket
 
-	#TODO: encrypt and send for images? or somehow detect that the message is str/image?
+
+	def send_int(self, integer):
+		"""Sends an integer over the connection.
+		
+		Encodes the integer into a 4 byte representation, encrypts it, 
+		and send it to the other party. 
+
+		Note: Integers are treated as being fixed width in order to simplify 
+			  network communication, however, integers in python aren't actually
+			  limited in size so loss of precision may occur in odd cases.
+		
+		Args:
+			integer (int): The number to be sent.
+		"""
+		self.encrypt_and_send(integer.to_bytes(4, byteorder='big'))
+
+	def send_float(self, floating_point_number):
+		"""Sends a floating point number over the connection.
+		
+		Encodes the floating point number into bytes, encrypts it,
+		and sends it to the other party. 
+		
+		Args:
+			floating_point_number (float): The number to be sent.
+		"""
+		self.encrypt_and_send(struct.pack('>f', floating_point_number))
+
+	def send_string(self, string):
+		"""Sends a string over the connection.
+		
+		Encodes the string into bytes using utf8, encrypts it, and sends it to the 
+		other party.
+		
+		Args:
+			string (str): The string to be sent.
+		"""
+		self.encrypt_and_send(string.encode('utf8'))
+
+	def send_image(self, image_path):
+		"""Sends an image over the connection.
+		
+		Encodes the image into bytes using PIL and BytesIO, encrypts the data, and
+		sends it to the other party.
+		
+		Args:
+			image_path (Path): The path to the image on disk.
+		"""
+		try:
+			with BytesIO() as output_image:
+				with Image.open(image_path) as source_image:
+					# jpeg can have two extensions, but only one is valid for PIL (jpeg)
+					extension = image_path.suffix.lstrip('.')
+					source_image.save(output_image, 'jpeg' if extension.lower() == 'jpg' else extension)
+
+				self.encrypt_and_send(output_image.getvalue())
+		except FileNotFoundError:
+			color_print("Error: Could not locate image at given path", color='red')
+		except UnidentifiedImageError:
+			color_print("Error: File could not be opened as an image", color='red')
+
+	def send_list(self, list_variable):
+		"""Sends a list over the connection.
+		
+		Encodes the list into bytes, encrypts it, and sends it to the other party.
+		
+		Args:
+			list_variable (list): The list to be sent.
+		"""
+		self.encrypt_and_send(bytes(list_of_variables))
+
+	# TODO: add check that the enumerable values are of type string? or something?
+	def send_enum(self, enumerable):
+		"""Sends an enumerable over the connection.
+		
+		Encodes the string representation of the enumerable into bytes, encrypts it, 
+		and sends it to the other party.
+		
+		Args:
+			enumerable (Enum): The enumerable to be sent.
+		"""
+		self.send_string(enumerable.value)
+
+	def receive_int(self):
+		"""Receives an integer over the connection.
+		
+		Receives and decrypts the integer bytes, then converts the bytes back into 
+		an integer.
+		
+		Returns:
+			int: The integer sent by the other party.
+		"""
+		return int.from_bytes(self.receive_and_decrypt(), byteorder='big')
+
+	def receive_float(self):
+		"""Receives a floating point number over the connection.
+		
+		Receives and decrypts the float bytes, then converts the bytes back into 
+		the float representation.
+		
+		Returns:
+			float: The float sent by the other party.
+		"""
+		return struct.unpack('>f', self.receive_and_decrypt())[0]
+
+	def receive_string(self):
+		"""Receives a string over the connection.
+		
+		Receives and decrypts the string bytes, then decodes them using utf8.
+		
+		Returns:
+			string: The string sent by the other party.
+		"""
+		return self.receive_and_decrypt().decode('utf8')
+
+	def receive_image(self):
+		"""Receives an image over the connection.
+		
+		Receives and decrypts the image bytes, then loads the bytes into a PIL Image.
+		
+		Returns:
+			Image: The image sent by the other party.
+		"""
+		image_bytes = BytesIO(self.receive_and_decrypt())
+		image_bytes.seek(0) # return file cursor to beginning of file
+		return Image.open(image_bytes)
+
+	def receive_list(self):
+		"""Receives a list over the connection.
+		
+		Receives and decrypts the list bytes, then initializes a list using the bytes.
+		
+		Returns:
+			list: The list sent by the other party.
+		"""
+		return list(self.receive_and_decrypt())
+	
+	def receive_enum(self, enum_type):
+		"""Receives an enumerable over the connection.
+		
+		Receives and decrypts the enumerable string bytes, then decodes the string using utf8
+		and initializes an enumerable using the given type and the decrypted value.
+		
+		Args:
+			enum_type (Enum): An enumerable class that will be used to create an instance given the value.
+
+		Returns:
+			Enum<enum_type>: The enumerable sent by the other party.
+		"""
+		return enum_type(self.receive_string())
+
 	def encrypt_and_send(self, message):
 		"""Sends a message to the server.
 		

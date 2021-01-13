@@ -9,9 +9,7 @@ from util.enum.status import Status
 from util.enum.tags import Tags
 from lazyme.string import color_print, color_str
 from pathlib import Path
-from PIL import Image, UnidentifiedImageError
-from io import BytesIO
-import struct
+import matplotlib.pyplot as plt
 
 #TODO: rename util to shared?
 #TODO: create a demo database so they don't have to upload files with prices and tags, etc.
@@ -67,12 +65,12 @@ class ClientPrompt(cmd2.Cmd):
 
 		self.send_command(Command.CREATE_USER)
 
-		self.communicator.encrypt_and_send(self.encode(username))
-		self.communicator.encrypt_and_send(self.encode(password))
+		self.communicator.send_string(username)
+		self.communicator.send_string(password)
 
-		result = self.communicator.receive_and_decrypt().decode('utf8')
+		result = self.communicator.receive_enum(Status)
 
-		if Status(result) == Status.SUCCESS:
+		if result == Status.SUCCESS:
 			color_print("Successfully created user %s" % username, color='blue')
 		else: 
 			color_print("Error: User already exists", color='red')
@@ -113,9 +111,9 @@ class ClientPrompt(cmd2.Cmd):
 	complete_add_image = cmd2.Cmd.path_complete
 
 	argparser_add_image = argparse.ArgumentParser()
-	argparser_add_image.add_argument('path', type=str)
-	argparser_add_image.add_argument('price', type=float)
-	argparser_add_image.add_argument('quantity', type=int)
+	argparser_add_image.add_argument('path', type=str, help='path to an image file')
+	argparser_add_image.add_argument('price', type=float, help='price of the image (product)')
+	argparser_add_image.add_argument('quantity', type=int, help='number of image (product) to stock')
 
 	@with_argparser(argparser_add_image)
 	def do_add_image(self, opts):
@@ -128,7 +126,6 @@ class ClientPrompt(cmd2.Cmd):
 			price (float): Cost of the image (product).
 			quantity (int): Quantity of the image (product) in the inventory.
 		"""
-
 		if not self.check_if_logged_in():
 			return 
 
@@ -138,23 +135,92 @@ class ClientPrompt(cmd2.Cmd):
 		
 		self.send_command(Command.ADD_IMAGE)
 
-		try:
-			with BytesIO() as output_image:
-				image_path = Path(opts.path)
-				with Image.open(opts.path) as source_image:
-					# jpeg can have two extensions, but only one is valid for PIL (jpeg)
-					extension = image_path.suffix.lstrip('.')
-					source_image.save(output_image, 'jpeg' if extension.lower() == 'jpg' else extension)
+		image_path = Path(opts.path)
+		self.communicator.send_image(image_path)
+		self.communicator.send_string(image_path.name)
 
-				self.communicator.encrypt_and_send(output_image.getvalue())
-				self.communicator.encrypt_and_send(image_path.name.encode('utf8'))
-				self.communicator.encrypt_and_send(struct.pack('>f', opts.price))
-				self.communicator.encrypt_and_send(opts.quantity.to_bytes(4, byteorder='big'))
-				self.communicator.encrypt_and_send(bytes(selection))
-		except FileNotFoundError:
-			color_print("Error: Could not locate image at given path", color='red')
-		except UnidentifiedImageError:
-			color_print("Error: File could not be opened as an image", color='red')
+		self.communicator.send_float(opts.price)
+		self.communicator.send_int(opts.quantity)
+		self.communicator.send_list(selection)
+
+	#TODO: search function that can take (a) an image, (b) a string (filename?), (c) a tag?
+	#	   should the tags be displayed and chosen? should multiple tags be possible?
+	#	   search_by_image, search_by_image_name, search_by_tag?
+	
+	complete_search_by_image = cmd2.Cmd.path_complete
+
+	argparser_search_by_image = argparse.ArgumentParser()
+	argparser_search_by_image.add_argument('path', type=str, help='path to an image file')
+
+	@with_argparser(argparser_search_by_image)
+	def do_search_by_image(self, opts):
+		"""Find images (products) similar to the provided image.
+		
+		Uploads the given image to the server and performs a similarity computation
+		on the other images in the database using nearest neighbours. 
+		
+		Args: (within argument parser opts)
+			path (str): Path to an image file.
+		"""
+		if not self.check_if_logged_in():
+			return 
+
+		self.send_command(Command.SEARCH_BY_IMAGE)
+
+		image_path = Path(opts.path)
+		self.communicator.send_image(image_path)
+		self.communicator.send_string(image_path.name)
+
+		num_neighbours = self.communicator.receive_int()
+		neighbours = list()
+
+		for _ in range(num_neighbours):
+			image = self.communicator.receive_image()
+			filename = self.communicator.receive_string()
+			cost = self.communicator.receive_float()
+			quantity = self.communicator.receive_int()
+
+			neighbours.append((image, filename, cost, quantity))
+
+		self.display_all_images(neighbours)
+
+	def display_all_images(self, images):
+		"""Displays the provided images.
+		
+		Creates a figure in pyplot consisting of a row for each image. The image is displayed 
+		in the left column and image information is displayed on the right. 
+		
+		Args:
+			images (list(tuple)): A list where each element is a tuple (image data, filename, 
+								  quantity, cost).
+		"""
+		figure = plt.figure()
+
+		columns = 2
+		rows = len(images)
+
+		j = 1
+
+		for i in range(rows):
+			(image, filename, cost, quantity) = images[i]
+
+			figure.add_subplot(rows, columns, j)
+			plt.axis('off')
+			plt.imshow(image)
+
+			ax = figure.add_subplot(rows, columns, j+1)
+			image_data = "[%s]" % filename
+			ax.text(0.5, 0.75, image_data, size=12, ha='center', va='center', wrap=True)
+			image_data = "Stock: %d" % quantity
+			ax.text(0.5, 0.5, image_data, size=12, ha='center', va='center', wrap=True)
+			image_data = "Price: %.2f" % cost
+			ax.text(0.5, 0.25, image_data, size=12, ha='center', va='center', wrap=True)
+			plt.axis('off')
+
+			j += 2
+
+		plt.axis('off')
+		plt.show()
 
 	def do_view_cart(self, args):
 		"""Display contents of cart.
@@ -186,21 +252,7 @@ class ClientPrompt(cmd2.Cmd):
 		Args:
 			command (Command): The command representing the operation to be performed. 
 		"""
-		self.communicator.encrypt_and_send(self.encode(command.value))
-
-	def encode(self, string):
-		"""Encodes a string as bytes.
-		
-		Encodes as string into it's utf8 representation as bytes. Converting the 
-		string to its byte representation is required for the encryption process. 
-		
-		Args:
-			string: The string to be encoded. 
-		
-		Returns:
-			bytes: Byte representation of the string. 
-		"""
-		return string.encode('utf8')
+		self.communicator.send_enum(command)
 
 	def verify_password(self, username, password):
 		"""Verifies the username and password with the server. 
@@ -216,12 +268,10 @@ class ClientPrompt(cmd2.Cmd):
 			Status: Either SUCCESS or FAILURE depending on whether the username
 					password combination was valid. 
 		"""
-		self.communicator.encrypt_and_send(self.encode(username))
-		self.communicator.encrypt_and_send(self.encode(password))
+		self.communicator.send_string(username)
+		self.communicator.send_string(password)
 
-		result = self.communicator.receive_and_decrypt().decode('utf8')
-
-		return Status(result)
+		return self.communicator.receive_enum(Status)
 
 if __name__ == '__main__':
 	prompt = ClientPrompt()

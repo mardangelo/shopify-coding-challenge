@@ -2,6 +2,7 @@ annoy==1.17.0
 cmd2==1.4.0
 gnureadline==8.0.0
 lazyme==0.0.23
+matplotlib==3.3.3
 passlib==1.7.4
 Pillow==8.1.0
 pycryptodome==3.9.9
