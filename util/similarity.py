@@ -43,7 +43,7 @@ RESIZE_DIMENSIONS = 224
 COLOUR_CHANNELS = 3
 
 FEATURE_VECTOR_DIMENSIONS = 1792
-N_NEAREST_NEIGHBOURS = 5
+N_NEAREST_NEIGHBOURS = 20
 NUM_TREES = 10000
 
 def preprocess_image(path):
@@ -140,7 +140,6 @@ def compute_nearest_neighbours(source_tensor, feature_tensors):
 	t.build(NUM_TREES)
 
 	# calculates the nearest neighbours to the source tensor in the forest
-	nearest_neighbours = t.get_nns_by_vector(source_tensor[0], N_NEAREST_NEIGHBOURS)
+	neighbour_ids = t.get_nns_by_vector(source_tensor[0], N_NEAREST_NEIGHBOURS)
 
-	return nearest_neighbours
-
+	return neighbour_ids

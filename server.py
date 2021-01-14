@@ -9,7 +9,7 @@ from db.database import Database
 
 from util.communicator import Communicator
 from util.enum.command import Command
-from util.enum.status import Status
+from util.enum.signal import Signal
 
 import util.similarity as tf
 
@@ -27,7 +27,7 @@ def main():
 			(conn, addr) = s.accept()
 
 			with conn:
-				color_print("Connected to by %s" % str(addr), 'blue')
+				color_print("Connected to by %s" % str(addr), color='blue')
 
 				commander = ServerCommander(conn)
 
@@ -35,10 +35,16 @@ def main():
 					try: 
 						commander.receive_and_execute_command()
 					except ConnectionError:
-						commander.exit()
+						commander.close_connection()
+						break
+					except ClientDisconnectException:
 						break
 
-				
+class ClientDisconnectException(Exception):
+	pass						
+
+# TODO: make sure there is an API so someone can, say, populate the database using a script
+# 		instead of going through the effort that is the client one by one
 
 class ServerCommander():
 	"""Receives commands from the client and processes them. 
@@ -67,10 +73,12 @@ class ServerCommander():
 		self.communicator = Communicator(connection)
 
 		self.commands = {
-			Command.LOGIN.value : self.login, 
-			Command.ADD_IMAGE.value : self.add_image,
-			Command.CREATE_USER.value: self.create_user, 
-			Command.SEARCH_BY_IMAGE.value: self.search_by_image
+			Command.LOGIN : self.login, 
+			Command.ADD_IMAGE : self.add_image,
+			Command.CREATE_USER: self.create_user, 
+			Command.SEARCH_BY_IMAGE: self.search_by_image, 
+			Command.BROWSE_BY_TAG: self.browse_by_tag, 
+			Command.EXIT: self.close_connection
 		}
 
 		self.db = Database()
@@ -81,7 +89,9 @@ class ServerCommander():
 		Receives and decrypts a command from the client and determines the correct 
 		method to execute the command. 
 		"""
-		self.dispatch_command(self.communicator.receive_string())
+		command = self.communicator.receive_enum(Command)
+		color_print("Received command: %s" % command.value, color='green')
+		self.dispatch_command(command)
 
 	def dispatch_command(self, command):
 		"""Dispatches a command to the appropriate method. 
@@ -95,12 +105,20 @@ class ServerCommander():
 		"""
 		self.commands[command]()
 
-	# TODO: flesh out this doc string
 	def check_if_logged_in(self):
-		"""Checks if there is a user that has logged in and can perform operations."""
+		"""Checks if the client has logged in as a user.
+		
+		When a user logs in, their username is stored and used for quick and simple checks 
+		that the client has been authenticated. 
+		
+		Returns:
+			bool: True if a user has logged in previously, False otherwise.
+		"""
 		is_not_logged_in = (self.username is None)
+
 		if is_not_logged_in:
 			color_print("User must be logged in to perform operations on the repository", color='magenta')
+		
 		return not is_not_logged_in
 
 	def create_user(self):
@@ -117,9 +135,9 @@ class ServerCommander():
 
 		if self.db.create_user(username, password):
 			self.username = username
-			self.communicator.send_enum(Status.SUCCESS)
+			self.communicator.send_enum(Signal.SUCCESS)
 		else: 
-			self.communicator.send_enum(Status.FAILURE)
+			self.communicator.send_enum(Signal.FAILURE)
 
 	def login(self):
 		"""Verifies the credentials of a user attempting to log in. 
@@ -133,9 +151,9 @@ class ServerCommander():
 
 		if self.db.verify_user(username, password):
 			self.username = username
-			self.communicator.send_enum(Status.SUCCESS)
+			self.communicator.send_enum(Signal.SUCCESS)
 		else: 
-			self.communicator.send_enum(Status.FAILURE)
+			self.communicator.send_enum(Signal.FAILURE)
 
 	def add_image(self):
 		"""Adds an image to the repository.
@@ -151,9 +169,14 @@ class ServerCommander():
 
 		(image, filename) = self.receive_image()
 
-		cost = receive_float()
-		quantity = receive_int()
+		cost = self.communicator.receive_float()
+		quantity = self.communicator.receive_int()
 		tag_selection = self.communicator.receive_list()
+
+		if Path("images/%s" % filename).exists():
+			color_print("Error: Image %s could not be added because a file with that name already exists" % filename, color='red')
+			self.communicator.send_enum(Signal.FAILURE)
+			return
 
 		image_path = self.save_image_to_directory("images", image, filename)
 		
@@ -163,10 +186,13 @@ class ServerCommander():
 		image_id = self.db.add_image(str(image_path), serialized_tensor, quantity, cost, self.username)
 		
 		if image_id is None:
-			color_print("Image could not be added because it already exists", color='red')
+			color_print("Error: Image %s could not be added because it already exists" % filename, color='red')
+			self.communicator.send_enum(Signal.FAILURE)
 			return
 
 		self.db.add_tags(image_id, tag_selection)
+
+		self.communicator.send_enum(Signal.SUCCESS)
 
 	def search_by_image(self):
 		"""Searches images (products) similar to the provided image.
@@ -187,16 +213,89 @@ class ServerCommander():
 		# clean up the temporary file
 		image_path.unlink()
 
-		neighbours = tf.compute_nearest_neighbours(feature_tensor, self.db.get_feature_vectors())
+		neighbour_ids = tf.compute_nearest_neighbours(feature_tensor, self.db.get_feature_vectors())
+
+		if len(neighbour_ids) == 0:
+			color_print("No images similar to the provided image were found", color='magenta')
+			self.communicator.send_enum(Signal.NO_RESULTS)
+
+		self.send_images_in_batches(len(neighbour_ids), self.db.get_image_attributes, [neighbour_ids])
 
 		# first send the client the number of neighbours to expect, then send them individually
-		self.communicator.send_int(len(neighbours))
-		for neighbour in neighbours:
-			self.send_image_to_client(neighbour)
+		# self.communicator.send_int(len(neighbours))
+		# for neighbour in neighbours:
+		# 	self.send_image_to_client(self.db.get_image_attributes(neighbour))
 
-	def send_image_to_client(self, image_id):
-		(image_path, quantity, cost) = self.db.get_image_attributes(image_id)
+	def send_images_in_batches(self, image_count, retrieve_func, retrieve_args, batch_size=5):
+		"""Sends images to the client in batches.
+		
+		Given a number of available images to be sent, batches of those images are packaged 
+		together and sent in units until the images are exhausted, or the user has declined 
+		to received more images.
+		
+		Args:
+			image_count (int): The total number of images that could be sent.
+			retrieve_func (function): A function that returns a list of tuples where each 
+									  tuple contains: (path to image, quantity, cost). This
+									  function should retrieve batch_size items.
+			retrieve_args (list): A list of any arguments to be passed to retrieve_func.
+			batch_size (int): The number of images to be included in a single batch. (default: {5})
+		"""
+		# send a signal to the client that images are about to be sent
+		self.communicator.send_enum(Signal.SEARCH_RESULTS)
 
+		# send images that do not quite amount to a full batch
+		if image_count < batch_size:
+			self.communicator.send_enum(Signal.START_TRANSFER)
+			self.communicator.send_enum(Signal.START_BATCH) 
+			images = retrieve_func(*retrieve_args)
+			self.send_batch_of_images(images)
+			self.communicator.send_enum(Signal.END_BATCH)
+			self.communicator.send_enum(Signal.END_TRANSFER)
+
+		# keep sending images in batches until the user sends a stop signal or there are no more images
+		images_sent = 0
+		self.communicator.send_enum(Signal.START_TRANSFER)
+
+		while image_count - images_sent > 0:
+			images = retrieve_func(*retrieve_args, offset=images_sent)
+			self.send_batch_of_images(images) 
+
+			# if there are more images left to be sent beyond this batch, let the client know
+			# then wait for their response as to whether another batch should be sent
+			if image_count - images_sent > batch_size:
+				self.communicator.send_enum(Signal.CONTINUE_TRANSFER)
+				if self.communicator.receive_enum(Signal) == Signal.END_TRANSFER:
+					color_print("Client has stopped requesting images", color='blue')
+					break
+			else: 
+				self.communicator.send_enum(Signal.END_TRANSFER)
+				break
+
+			images_sent += batch_size
+
+	def browse_by_tag(self):
+		if not self.check_if_logged_in():
+			return
+
+		tags = self.communicator.receive_list()
+
+		images_to_be_displayed = self.db.count_images_with_tags(tags)
+
+		if images_to_be_displayed == 0:
+			color_print("No images found matching the given tags", color='magenta')
+			self.communicator.send_enum(Signal.NO_RESULTS)
+
+		self.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images_with_tags, [tags])
+
+	def send_batch_of_images(self, images, offset=0):
+		self.communicator.send_enum(Signal.START_BATCH)
+		for image in images:
+			self.communicator.send_enum(Signal.CONTINUE_BATCH)
+			self.send_image_to_client(image_path=Path(image[0]), quantity=image[1], cost=image[2])
+		self.communicator.send_enum(Signal.END_BATCH)
+
+	def send_image_to_client(self, image_path, quantity, cost):
 		color_print(str((image_path, quantity, cost)), color='green')
 
 		self.communicator.send_image(image_path)
@@ -218,12 +317,12 @@ class ServerCommander():
 		Returns:
 			Path: path to the saved image file.
 		"""
-		# TODO: make this relative to main project directory if moved to another file?
-		# TODO: should I be able to retrieve images and display them somehow (image.show())
+		#TODO: does it matter how the main program is executed? 
+		#      will it change where the directory is? does it matter?
 		image_directory = Path(directory) 
 		image_directory.mkdir(parents=True, exist_ok=True)
 		image_path = image_directory / filename # append to path, uses '/' operator
-		image.save(image_path) 
+		image.save(image_path)
 
 		return image_path
 
@@ -242,10 +341,12 @@ class ServerCommander():
 
 		return (image, filename)
 
-	def exit(self):
+	def close_connection(self):
 		"""Closes any open connections (e.g., database)."""
 		self.db.close_connection()
+		self.communicator.shutdown()
 		color_print("Client disconnected", 'blue')
+		raise ClientDisconnectException
 
 if __name__ == '__main__':
 	main()

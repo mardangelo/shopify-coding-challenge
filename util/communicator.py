@@ -1,4 +1,5 @@
 import socket 
+from enum import Enum
 
 from pathlib import Path
 from PIL import Image, UnidentifiedImageError
@@ -8,6 +9,26 @@ import struct
 from lazyme.string import color_print
 
 from .cipher import Cipher
+from .enum.signal import Signal
+
+class Code(Enum):
+	"""Short codes used for communication. 
+	
+	Fixed length codes that are intended to be sent unencrypted between the client and 
+	the server. They are meant to denote simple signals that are of no consequence if 
+	an attacker reads them.
+	
+	Attributes:
+		ACKNOWLEDGE (str): Acknowledge the receipt of some data.
+		ERROR (str): Error receiving the data, sending party should reattempt. 
+	"""
+
+	ACKNOWLEDGE = 'ack'
+	ERROR = 'err'
+
+	@classmethod
+	def get_size(cls):
+		return 3
 
 class Communicator:
 	"""Utility class for managing communication between client and server.
@@ -20,8 +41,6 @@ class Communicator:
 	Attributes:
 		HOST (str): Host name or IP address of the server. 
 		PORT (int): Port open to receive connections on the server.
-		ACK_SIZE (int): The size of an acknowledgement that a message has been received
-						over the communication channel. 
 						
 		socket (Socket): Represents the connection between client and server.
 		cipher (Cipher): Manages cryptographic operations.  
@@ -29,8 +48,6 @@ class Communicator:
 
 	HOST = '127.0.0.1'
 	PORT = 65432
-
-	ACK_SIZE = 3
 
 	def __init__(self, socket=None):
 		"""Initializes a Communicator object.
@@ -47,6 +64,7 @@ class Communicator:
 			self.socket = self.connect_to_server()
 		else:
 			self.socket = socket
+
 		self.cipher = Cipher()
 
 	def connect_to_server(self):
@@ -61,7 +79,6 @@ class Communicator:
 		server_socket.connect((self.HOST, self.PORT))
 
 		return server_socket
-
 
 	def send_int(self, integer):
 		"""Sends an integer over the connection.
@@ -78,6 +95,17 @@ class Communicator:
 		"""
 		self.encrypt_and_send(integer.to_bytes(4, byteorder='big'))
 
+	def receive_int(self):
+		"""Receives an integer over the connection.
+		
+		Receives and decrypts the integer bytes, then converts the bytes back into 
+		an integer.
+		
+		Returns:
+			int: The integer sent by the other party.
+		"""
+		return int.from_bytes(self.receive_and_decrypt(), byteorder='big')
+
 	def send_float(self, floating_point_number):
 		"""Sends a floating point number over the connection.
 		
@@ -89,6 +117,17 @@ class Communicator:
 		"""
 		self.encrypt_and_send(struct.pack('>f', floating_point_number))
 
+	def receive_float(self):
+		"""Receives a floating point number over the connection.
+		
+		Receives and decrypts the float bytes, then converts the bytes back into 
+		the float representation.
+		
+		Returns:
+			float: The float sent by the other party.
+		"""
+		return struct.unpack('>f', self.receive_and_decrypt())[0]
+
 	def send_string(self, string):
 		"""Sends a string over the connection.
 		
@@ -99,6 +138,16 @@ class Communicator:
 			string (str): The string to be sent.
 		"""
 		self.encrypt_and_send(string.encode('utf8'))
+
+	def receive_string(self):
+		"""Receives a string over the connection.
+		
+		Receives and decrypts the string bytes, then decodes them using utf8.
+		
+		Returns:
+			string: The string sent by the other party.
+		"""
+		return self.receive_and_decrypt().decode('utf8')
 
 	def send_image(self, image_path):
 		"""Sends an image over the connection.
@@ -122,60 +171,6 @@ class Communicator:
 		except UnidentifiedImageError:
 			color_print("Error: File could not be opened as an image", color='red')
 
-	def send_list(self, list_variable):
-		"""Sends a list over the connection.
-		
-		Encodes the list into bytes, encrypts it, and sends it to the other party.
-		
-		Args:
-			list_variable (list): The list to be sent.
-		"""
-		self.encrypt_and_send(bytes(list_of_variables))
-
-	# TODO: add check that the enumerable values are of type string? or something?
-	def send_enum(self, enumerable):
-		"""Sends an enumerable over the connection.
-		
-		Encodes the string representation of the enumerable into bytes, encrypts it, 
-		and sends it to the other party.
-		
-		Args:
-			enumerable (Enum): The enumerable to be sent.
-		"""
-		self.send_string(enumerable.value)
-
-	def receive_int(self):
-		"""Receives an integer over the connection.
-		
-		Receives and decrypts the integer bytes, then converts the bytes back into 
-		an integer.
-		
-		Returns:
-			int: The integer sent by the other party.
-		"""
-		return int.from_bytes(self.receive_and_decrypt(), byteorder='big')
-
-	def receive_float(self):
-		"""Receives a floating point number over the connection.
-		
-		Receives and decrypts the float bytes, then converts the bytes back into 
-		the float representation.
-		
-		Returns:
-			float: The float sent by the other party.
-		"""
-		return struct.unpack('>f', self.receive_and_decrypt())[0]
-
-	def receive_string(self):
-		"""Receives a string over the connection.
-		
-		Receives and decrypts the string bytes, then decodes them using utf8.
-		
-		Returns:
-			string: The string sent by the other party.
-		"""
-		return self.receive_and_decrypt().decode('utf8')
-
 	def receive_image(self):
 		"""Receives an image over the connection.
 		
@@ -186,7 +181,23 @@ class Communicator:
 		"""
 		image_bytes = BytesIO(self.receive_and_decrypt())
 		image_bytes.seek(0) # return file cursor to beginning of file
+
 		return Image.open(image_bytes)
+
+	def send_list(self, list_variable):
+		"""Sends a list over the connection.
+		
+		Encodes the list into bytes, encrypts it, and sends it to the other party.
+		
+		Args:
+			list_variable (list): The list to be sent.
+		"""
+		if not list_variable:
+			self.send_enum(Signal.EMPTY)
+			return
+
+		self.send_enum(Signal.POPULATED)
+		self.encrypt_and_send(bytes(list_variable))
 
 	def receive_list(self):
 		"""Receives a list over the connection.
@@ -196,7 +207,21 @@ class Communicator:
 		Returns:
 			list: The list sent by the other party.
 		"""
+		if self.receive_enum(Signal) == Signal.EMPTY:
+			return list()
+
 		return list(self.receive_and_decrypt())
+
+	def send_enum(self, enumerable):
+		"""Sends an enumerable over the connection.
+		
+		Encodes the string representation of the enumerable into bytes, encrypts it, 
+		and sends it to the other party.
+		
+		Args:
+			enumerable (Enum): The enumerable to be sent.
+		"""
+		self.send_string(enumerable.value)
 	
 	def receive_enum(self, enum_type):
 		"""Receives an enumerable over the connection.
@@ -212,6 +237,34 @@ class Communicator:
 		"""
 		return enum_type(self.receive_string())
 
+	def receive_code(self):
+		"""Receive a short code.
+		
+		Receives a string signal and converts it into a Code enum. 
+		
+		Returns:
+			Code: The code that was received as an enum. 
+		"""
+		code = self.socket.recv(Code.get_size())
+
+		if not code:
+			return None
+
+		return Code(code.decode('utf8'))
+
+	def send_code(self, code):
+		"""Sends a short code.
+		
+		Sends a signal to the other party. The signal is provided as a Code enum 
+		which is sent using its string value. Note that this signal is intentionally
+		not encrypted because it does not give away any extraneous information and 
+		the overhead of encrypting these messages would not be worth it. 
+
+		Args:
+			code (Code): The code to be sent. 
+		"""
+		self.socket.sendall(code.value.encode('utf8'))
+
 	def encrypt_and_send(self, message):
 		"""Sends a message to the server.
 		
@@ -226,10 +279,50 @@ class Communicator:
 		# as all other items (tag, nonce) are of fixed length. 
 		ciphertext_length = len(ciphertext).to_bytes(Cipher.LENGTH_SIZE, byteorder='big')
 
-		self.send_data(ciphertext_length)
-		self.send_data(ciphertext)
-		self.send_data(tag)
-		self.send_data(nonce)
+		code = Code.ERROR
+
+		while code != Code.ACKNOWLEDGE: 
+			self.send_data(ciphertext_length)
+			self.send_data(ciphertext)
+			self.send_data(tag)
+			self.send_data(nonce)
+
+			code = self.receive_code()
+
+			if not code: 
+				raise ConnectionError("Failed to receive a code")
+
+			elif code == Code.ERROR: 
+				color_print("Received error code after transmission, resending", color='red')
+				continue
+
+	def receive_and_decrypt(self):
+		"""Receives a message. 
+		
+		Receives a message over the socket and decrypts it. 
+		
+		Returns:
+			bytes: Plaintext of the decrypted data.
+		"""
+		data = None
+		while not data:
+			try:
+				# Of the three pieces of information sent, only the ciphertext is variable
+				# length so we determine its length before attempting to receive it 
+				length = self.receive_data(Cipher.LENGTH_SIZE)
+				ciphertext_length = int.from_bytes(length, byteorder='big')
+
+				ciphertext = self.receive_data(ciphertext_length)
+				tag = self.receive_data(Cipher.TAG_SIZE)
+				nonce = self.receive_data(Cipher.NONCE_SIZE)
+
+				data = self.cipher.decrypt(ciphertext, tag, nonce)
+				self.send_code(Code.ACKNOWLEDGE)
+			except ValueError:
+				color_print("Error receiving item, sender should retransmit", color='red')
+				self.send_code(Code.ERROR)
+
+		return data
 
 	def send_data(self, data):
 		"""Sends data using the socket.
@@ -244,39 +337,10 @@ class Communicator:
 		"""
 		self.socket.sendall(data)
 
-		ack = self.socket.recv(self.ACK_SIZE)
-		if not ack: 
+		code = self.socket.recv(Code.get_size())
+
+		if not code: 
 			raise ConnectionError("Failed to receive acknowledgement")
-
-	def receive_and_decrypt(self):
-		"""Receives a message. 
-		
-		Receives a message over the socket and decrypts it. 
-		
-		Returns:
-			bytes: Plaintext of the decrypted data.
-		"""
-		# Of the three pieces of information sent, only the ciphertext is variable
-		# length so we determine its length before attempting to receive it 
-		length = self.receive_data(Cipher.LENGTH_SIZE)
-		ciphertext_length = int.from_bytes(length, byteorder='big')
-
-		ciphertext = self.receive_data(ciphertext_length)
-		tag = self.receive_data(Cipher.TAG_SIZE)
-		nonce = self.receive_data(Cipher.NONCE_SIZE)
-
-		data = self.cipher.decrypt(ciphertext, tag, nonce)
-
-		return data
-
-	def acknowledge_receipt(self):
-		"""Sends an acknowledgement.
-		
-		Sends an ack signal to the other party. Note that this signal is intentionally
-		not encrypted because it does not give away any extraneous information and 
-		the overhead of encrypting these messages would not be worth it. 
-		"""
-		self.socket.sendall('ack'.encode('utf8'))
 
 	def receive_data(self, length):
 		"""Receives data.
@@ -293,16 +357,32 @@ class Communicator:
 		Raises:
 			ConnectionError: If data has not been received.
 		"""
-		data = self.socket.recv(length)
+		#TODO: recv is blocking, use select to wait until data is available?
+		#	   this may have been fixed already, but remember this if the server hangs
+		#	   after the client disconnects (b/c it is waiting for a command)
+
+		data = bytearray()
+
+		while len(data) < length:
+			data.extend(self.socket.recv(length))
 
 		if not data:
 			raise ConnectionError("Failed to receive data")
 
-		self.acknowledge_receipt()
+		self.send_code(Code.ACKNOWLEDGE)
 
 		return data
 
 	def shutdown(self):
-		"""Severs the connection between client and server."""
-		self.socket.shutdown(socket.SHUT_RDWR)
+		"""Severs the connection between client and server.
+		
+		Blocks communication in both directions (send and receive) for client/server. 
+		Subsequently, destroys the socket. 
+		"""
+		try:
+			self.socket.shutdown(socket.SHUT_RDWR)
+		except OSError:
+			# the socket was already shutdown by the other party
+			pass
+
 		self.socket.close()

@@ -5,7 +5,7 @@ from util.communicator import Communicator
 import getpass
 import argparse
 from util.enum.command import Command
-from util.enum.status import Status
+from util.enum.signal import Signal
 from util.enum.tags import Tags
 from lazyme.string import color_print, color_str
 from pathlib import Path
@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 
 #TODO: rename util to shared?
 #TODO: create a demo database so they don't have to upload files with prices and tags, etc.
+#	   maybe do a database of photos of mythological figures? or just from hades? and price
+#	   them based on how much I like them...
 
 class ClientPrompt(cmd2.Cmd):
 	"""Interface for user to interact with image repository.
@@ -35,14 +37,23 @@ class ClientPrompt(cmd2.Cmd):
 	def __init__(self):
 		self.user = None 
 		self.communicator = Communicator()
+		plt.switch_backend('Qt5Agg') #TODO: move plotting stuff to another file
 		super().__init__()
 
-	# TODO: flesh out this doc string
 	def check_if_logged_in(self):
-		"""Checks if there is a user that has had their credentials verified by the server."""
+		"""Checks if the user has successfully logged in.
+		
+		When a user logs in, their username is stored and used for quick and simple checks 
+		that the client has been authenticated before performing operations. 
+		
+		Returns:
+			bool: True if the user has logged already, False otherwise.
+		"""
 		is_not_logged_in = (self.user is None)
+
 		if is_not_logged_in:
 			color_print("User must be logged in for this command to function", color='magenta')
+		
 		return not is_not_logged_in
 
 	def do_create_user(self, username):
@@ -68,9 +79,9 @@ class ClientPrompt(cmd2.Cmd):
 		self.communicator.send_string(username)
 		self.communicator.send_string(password)
 
-		result = self.communicator.receive_enum(Status)
+		result = self.communicator.receive_enum(Signal)
 
-		if result == Status.SUCCESS:
+		if result == Signal.SUCCESS:
 			color_print("Successfully created user %s" % username, color='blue')
 		else: 
 			color_print("Error: User already exists", color='red')
@@ -95,7 +106,7 @@ class ClientPrompt(cmd2.Cmd):
 
 		self.send_command(Command.LOGIN)
 		
-		if self.verify_password(username, password) == Status.SUCCESS:
+		if self.verify_password(username, password) == Signal.SUCCESS:
 			self.user = username
 			color_print("Successfully logged in as %s" % username, color='blue')
 		else:
@@ -103,7 +114,7 @@ class ClientPrompt(cmd2.Cmd):
 			# (2) user doesn't exist. It is intentional that the status of a user
 			# not be revealed - as is standard when usernames can be global
 			# identifiers such as emails, etc. It would be trivial to enhance
-			# the Status codes to specifically specify INCORRECT_PASSWORD and
+			# the Signal codes to specifically specify INCORRECT_PASSWORD and
 			# USER_DOES_NOT_EXIST should confidentiality of existing users not
 			# be required. 
 			color_print("Error: Failed to log in as %s" % username, color='red')
@@ -119,7 +130,9 @@ class ClientPrompt(cmd2.Cmd):
 	def do_add_image(self, opts):
 		"""Adds an image (product) to Image Repository.
 		
-		Uploads the image specified by path to the server along with the price.
+		Uploads the image specified by path to the server along with the price. Prompts the user 
+		to select tags from a displayed list. Pre-defined tags are used as opposed to freeform 
+		text in order to avoid the issue of typos leading to missed matches.
 		
 		Args: (within argument parser opts)
 			path (str): Path to an image file.
@@ -129,9 +142,7 @@ class ClientPrompt(cmd2.Cmd):
 		if not self.check_if_logged_in():
 			return 
 
-		Tags.display_tags_for_selection()
-		selection_raw = input(color_str("Enter the number(s) of the relevant tag(s): ", color='green'))
-		selection = [int(s) for s in selection_raw.split(',') if s.isdigit()]
+		tags = self.prompt_user_for_tags()
 		
 		self.send_command(Command.ADD_IMAGE)
 
@@ -141,11 +152,59 @@ class ClientPrompt(cmd2.Cmd):
 
 		self.communicator.send_float(opts.price)
 		self.communicator.send_int(opts.quantity)
-		self.communicator.send_list(selection)
+		self.communicator.send_list(tags)
 
-	#TODO: search function that can take (a) an image, (b) a string (filename?), (c) a tag?
-	#	   should the tags be displayed and chosen? should multiple tags be possible?
-	#	   search_by_image, search_by_image_name, search_by_tag?
+		if self.communicator.receive_enum(Signal) == Signal.FAILURE:
+			color_print("Error: Image %s could not be added because it already exists" % image_path.name, color='red')
+
+	def prompt_user_for_tags(self):
+		"""Displays tags and prompts user to select using integer identifiers.
+		
+		Shows all of the tags to the user, where each tag is associated with an integer 
+		identifier. The user may enter nothing, which results in no tags being associated 
+		with the image. The user may enter a single identifier, or the user may enter a comma 
+		separated list of identifiers. In order to address errors in input, the user will be 
+		prompted for input until they meet one of those conditions. 
+		
+		Returns:
+			list(int): A list containing any tag identifiers selected by the user, or an empty list 
+				  	   if the user did not make any selections.
+		"""
+		Tags.display_tags_for_selection()
+
+		# ask for input until successful in case of errors in entry
+		while True:
+			selection_raw = input(color_str("Enter the number(s) of the relevant tag(s): ", color='green'))
+
+			# actual first check if it's an empty input, ask them to confirm or have them retry
+			if not selection_raw:
+				confirmation = input(color_str("No tags have been selected, would you like to proceed? (y/n) ", color='magenta'))
+				if confirmation == 'y':
+					return list()
+				else: 
+					continue
+
+			# check if input is a single integer
+			elif selection_raw.isdigit():
+				return [int(selection_raw)]
+
+			# check if input is a comma separated string
+			elif ',' in selection_raw:
+				selection_list = selection_raw.split(',')
+
+				try:
+					# convert the list of integers to a set so duplicates get removed, this eliminates
+					# errors on the server side (so technically this could just be an error, but for
+					# a better user experience it gets fixed here)
+					return list(set([int(s.strip()) for s in selection_list]))
+				except:
+					color_print("Error: invalid selection, provide a comma separated list of integers", color='red')
+					continue
+
+			# if the input didn't fall into any of the valid categories, prompt again
+			else:
+				color_print("Error: invalid selection, provide a comma separated list of integers", color='red')
+		
 	
 	complete_search_by_image = cmd2.Cmd.path_complete
 
@@ -171,20 +230,78 @@ class ClientPrompt(cmd2.Cmd):
 		self.communicator.send_image(image_path)
 		self.communicator.send_string(image_path.name)
 
-		num_neighbours = self.communicator.receive_int()
-		neighbours = list()
+		signal = self.communicator.receive_enum(Signal)
 
-		for _ in range(num_neighbours):
-			image = self.communicator.receive_image()
-			filename = self.communicator.receive_string()
-			cost = self.communicator.receive_float()
-			quantity = self.communicator.receive_int()
+		if signal == Signal.NO_RESULTS: 
+			color_print("No images similar to the provided image were found", color='magenta')
+			return
 
-			neighbours.append((image, filename, cost, quantity))
+		self.receive_batches_of_images()
 
-		self.display_all_images(neighbours)
+	def do_browse_by_tag(self, args):
+		"""Browses for images (products) matching the given tag(s).
+		
+		Prompts user to select tags and retrieves images (products) matching those tags 
+		from the database. If the user enters no tags, all images can be shown. If the user 
+		enters multiple tags, then images matching the _intersection_ of those tags will be 
+		retrieved and displayed. 
+		
+		Args:
+			args: unused
+		"""
+		if not self.check_if_logged_in():
+			return 
 
-	def display_all_images(self, images):
+		tags = self.prompt_user_for_tags() 
+
+		self.send_command(Command.BROWSE_BY_TAG)
+
+		self.communicator.send_list(tags)
+
+		signal = self.communicator.receive_enum(Signal)
+
+		if signal == Signal.NO_RESULTS: 
+			color_print("No matches found for the given tags", color='magenta')
+			return
+
+		self.receive_batches_of_images()
+
+	def receive_batches_of_images(self):
+		# keep processing batches unless the server signals otherwise
+		signal = self.communicator.receive_enum(Signal) 
+		while signal != Signal.END_TRANSFER:
+			image_batch = list()
+
+			# within a batch keep receiving images until the server signals a stop
+			if self.communicator.receive_enum(Signal) == Signal.START_BATCH:
+				while self.communicator.receive_enum(Signal) != Signal.END_BATCH:
+					image = self.communicator.receive_image()
+					filename = self.communicator.receive_string()
+					cost = self.communicator.receive_float()
+					quantity = self.communicator.receive_int()
+
+					image_batch.append((image, filename, cost, quantity))
+
+					image_id = color_str("[%d] " % len(image_batch), color='cyan')
+					image_details = color_str("%s (%d, %.2f)" % (filename, quantity, cost), color='blue')
+					print(image_id + image_details)
+
+				self.display_batch_of_images(image_batch)
+
+			#TODO: ask user for selection to add to cart *(need image id)*
+
+			# the server will signal whether it has more images to send
+			signal = self.communicator.receive_enum(Signal) 
+
+			if signal == Signal.CONTINUE_TRANSFER:
+				show_next = input("Display more images? (y/n) ")
+				if show_next == 'y':
+					self.communicator.send_enum(Signal.CONTINUE_TRANSFER) 
+				else: 
+					self.communicator.send_enum(Signal.END_TRANSFER)
+					break
+
+	def display_batch_of_images(self, images):
 		"""Displays the provided images.
 		
 		Creates a figure in pyplot consisting of a row for each image. The image is displayed 
@@ -194,7 +311,7 @@ class ClientPrompt(cmd2.Cmd):
 			images (list(tuple)): A list where each element is a tuple (image data, filename, 
 								  quantity, cost).
 		"""
-		figure = plt.figure()
+		figure = plt.figure(figsize=(5,10))
 
 		columns = 2
 		rows = len(images)
@@ -220,7 +337,7 @@ class ClientPrompt(cmd2.Cmd):
 			j += 2
 
 		plt.axis('off')
-		plt.show()
+		plt.show(block=True)
 
 	def do_view_cart(self, args):
 		"""Display contents of cart.
@@ -235,13 +352,25 @@ class ClientPrompt(cmd2.Cmd):
 	def do_exit(self, args):
 		"""Exits the image repository.
 		
-		Exits the repository and closes the connection to the server. 
+		Closes the connection to the server and exits the client. 
 		""" 
 		print(self.goodbye)
+
+		try:
+			self.send_command(Command.EXIT)
+		except (BrokenPipeError, ConnectionError):
+			pass
 
 		self.communicator.shutdown()
 
 		raise SystemExit
+
+	def do_eof(self, args):
+		"""Exits the image repository.
+		
+		Closes the connection to the server and exits the client.
+		""" 
+		self.do_exit(args)
 
 	def send_command(self, command):
 		"""Sends a command to the server.
@@ -265,13 +394,13 @@ class ClientPrompt(cmd2.Cmd):
 			password: Password provided by the user attempting to log in. 
 		
 		Returns:
-			Status: Either SUCCESS or FAILURE depending on whether the username
+			Signal: Either SUCCESS or FAILURE depending on whether the username
 					password combination was valid. 
 		"""
 		self.communicator.send_string(username)
 		self.communicator.send_string(password)
 
-		return self.communicator.receive_enum(Status)
+		return self.communicator.receive_enum(Signal)
 
 if __name__ == '__main__':
 	prompt = ClientPrompt()

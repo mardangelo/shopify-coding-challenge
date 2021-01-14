@@ -1,9 +1,11 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine, MetaData
+from sqlalchemy import create_engine, MetaData, and_, distinct
 from sqlalchemy.sql import exists
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+
+from tabulate import tabulate
 
 from lazyme.string import color_print
 
@@ -113,8 +115,7 @@ class Database():
 
 		return result
 
-	#TODO: ponder whether the best comparison would be feature vector or path? what is the
-	#	   likelihood of a feature vector being repeated?
+	#TODO: should I implement unique(filename,feature_vector)? would need to rename files...
 	def add_image(self, path, feature_vector, quantity, cost, username):
 		"""Adds an image to the repository. 
 		
@@ -139,7 +140,7 @@ class Database():
 		self.session.add(image)
 		self.session.commit()
 
-		color_print("Image successfully added to database", color='blue')
+		color_print("Image %s successfully added to database" % path, color='blue')
 
 		return image.id
 
@@ -153,34 +154,104 @@ class Database():
 			image_id (int): The database id of the image to add tags for.
 			tags (list(int)): A list of tags ids to associate with the image.
 		"""
-
 		for tag in tags:
 			image_tag = ImageTag(image_id=image_id, tag_id=tag)
 			self.session.add(image_tag)
 
 		self.session.commit()
 
-	#TODO: do some error checking if the image id isn't valid for whatever reason?
-	def get_image_attributes(self, image_id):
-		"""Retrieves information about an image given its id.
+	def count_images_with_tags(self, tags):
+		"""Calculates the number of images that have the given tags.
 		
-		Queries the database for the path of the image, the amount in stock, and the cost.
+		Determines how many images have been associated with all of the given tags. 
+		If no tags are provided, the number of total images in the database is reported.
 		
 		Args:
-			image_id (int): The database identifier of the image.
+			tags (list(int)): A list of tag identifiers to be matched.
+		
+		Returns:
+			int: The number of images matching the tags given.
+		"""
+		if not tags: 
+			return self.session.query(Image.id).count()
+		
+		return self.build_select_images_with_tags_query(tags).count()
+
+	def build_select_images_with_tags_query(self, tags):
+		"""Builds a query to find images with all given tags.
+		
+		Given a list of tags, determines which images have each individual tag and then 
+		intersects those images to find the images with all of the tags.
+		
+		Args:
+			tags (list(int)): A list of tag identifiers to be matched.
+		
+		Returns:
+			Query: A query that intersects the checks for each individual tag.
+		"""
+		queries = list()
+		for tag in tags:
+			query = self.session.query(ImageTag.image_id.label("image_id")).filter_by(tag_id=tag)
+			queries.append(query)
+
+		return queries.pop(0).intersect(*queries)
+
+	def retrieve_images_with_tags(self, tags, batch_size=5, offset=0):
+		"""Gets information about the images matching the given tags. 
+		
+		Finds the images that are associated with all of the given tags, then retrieves 
+		necessary attributes about those images (path, cost, quantity). The number of images 
+		returned is capped at 5 (but may be less) and an offset can be provided in order to 
+		send images in batches (continuing from where the last batch ended). 
+		
+		Args:
+			tags (list(int)): A list of tag identifiers to be matched.
+			batch_size (int): The maximum number of images to be returned. (default: {5})
+			offset (int): The offset to be passed to the query which denotes the point where 
+						  the results should start being retrieved from. (default: {0})
 
 		Returns:
-			str: The path to the image on disk.
-			int: The number of items in stock.
-			float: The cost of each individual item.
+			list(tuple): A list where each element is a tuple representing an image and containing 
+						 (path to image, quantity, cost).
 		"""
-		(result, ) = self.session.query(Image.image_path, Image.quantity, Image.cost).filter(Image.id == image_id)
+		if not tags: 
+			return self.session.query(Image.image_path, Image.quantity, Image.cost) \
+							   .offset(offset).limit(batch_size).all()
 
-		path = Path(result[0])
-		quantity = result[1]
-		cost = round(result[2], 2)
+		matching_images = self.build_select_images_with_tags_query(tags).subquery()
+		first_column = next(iter(matching_images.c)) # get a reference to the column of image ids
 
-		return (path, quantity, cost)
+		return self.session.query(Image.image_path, Image.quantity, Image.cost) \
+						   .join(matching_images, first_column == Image.id) \
+						   .offset(offset).limit(batch_size).all()
+
+	def get_image_attributes(self, image_ids, batch_size=5, offset=0):
+		"""Retrieves the attributes for a batch of images.
+		
+		Queries the database for each identifer provided and retrieves the path to the image, 
+		the quantity, and its cost. This is done for a batch of the provided size that starts
+		at the given offset. Note that this is an ordered operation, which is important when 
+		gathering the attributes of nearest neighbours! The most similar images retain their 
+		position in the resulting list. 
+		
+		Args:
+			image_ids (list(int)): A list of image identifiers.
+			batch_size (int): The size of the batch to use. (default: {5})
+			offset (int): The offset into the list from where to start processing ids. 
+						  (default: {0})
+		
+		Returns:
+			list(tuple): A list of tuples where each tuple contains the attributes of a single
+						 image (path, quantity, cost).
+		"""
+		images = list()
+
+		for image_id in image_ids[offset:(offset + batch_size)]:
+			image = self.session.query(Image.image_path, Image.quantity, Image.cost) \
+						        .filter_by(id=image_id).one()
+			images.append(image)
+
+		return images
 
 	def get_feature_vectors(self):
 		"""Retrieves the feature vectors of all images.

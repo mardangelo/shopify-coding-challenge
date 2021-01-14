@@ -1,5 +1,6 @@
 import os
 import base64
+
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 
@@ -35,7 +36,7 @@ class Cipher:
 	"""
 
 	KEY_SIZE = 16
-	LENGTH_SIZE = 32
+	LENGTH_SIZE = 8
 	TAG_SIZE = 16
 	NONCE_SIZE = 16
 
@@ -114,6 +115,7 @@ class Cipher:
 			bytes: Plaintext of the decrypted data.
 		"""
 		cipher = AES.new(self.key, AES.MODE_EAX, nonce)
+
 		message = cipher.decrypt_and_verify(ciphertext, tag)
 
 		return message

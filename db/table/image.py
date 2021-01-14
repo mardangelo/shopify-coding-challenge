@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, Float, LargeBinary, ForeignKey
+from sqlalchemy import Column, String, Integer, Float, LargeBinary
+from sqlalchemy import ForeignKey, UniqueConstraint
 
 from .user import User
 
@@ -14,3 +15,11 @@ class Image(Base):
 	cost = Column(Float)
 	seller = Column(Integer, ForeignKey(User.id))
 
+	#TODO: instead of forcing a unique filename, one might enforce that the feature vector
+	# 	   filename combination must be unique. Features vectors aren't guaranteed to be 
+	# 	   unique since they are a reduction in the dimensionality of the image, but the 
+	# 	   likelihood that someone may find such a collision and name the file the same way
+	# 	   seems acceptable. Plus they would see a message about the filename and they 
+	# 	   could change that and re-upload. To use this would need to come up with an file 
+	# 	   renaming scheme.
+	#UniqueConstraint(image_path, feature_vector, name='unique_images')
