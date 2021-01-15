@@ -28,7 +28,7 @@ def main():
 			(conn, addr) = s.accept()
 
 			with conn:
-				color_print("Connected to by %s" % str(addr), color='blue')
+				color_print("Client %s connected" % str(addr), color='blue')
 
 				commander = ServerCommander(conn)
 
@@ -40,6 +40,8 @@ def main():
 						break
 					except ClientDisconnectException:
 						break
+
+				color_print("Client %s disconnected" % str(addr), color='blue')
 
 class ClientDisconnectException(Exception):
 	pass						
@@ -91,9 +93,17 @@ class ServerCommander():
 		Receives and decrypts a command from the client and determines the correct 
 		method to execute the command. 
 		"""
-		command = self.communicator.receive_enum(Command)
-		color_print("Received command: %s" % command.value, color='green')
-		self.dispatch_command(command)
+		try:
+			command = self.communicator.receive_enum(Command)
+			color_print("Received command: %s" % command.value, color='green')
+			self.dispatch_command(command)
+		except (ValueError, UnicodeDecodeError, OverflowError, MemoryError): 
+			# This often happens if the user kills the client in the middle of a protocol
+			# and the server has some state and expects signals/data instead of EXIT command.
+			# If the communication gets "misaligned" because of an abort a string may be 
+			# interpreted as an integer and overflow (for example).
+			color_print("Error: Unexpected data received", color='red')
+			raise ClientDisconnectException
 
 	def dispatch_command(self, command):
 		"""Dispatches a command to the appropriate method. 
