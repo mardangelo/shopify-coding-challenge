@@ -7,6 +7,7 @@ from pathlib import Path
 
 from db.database import Database
 
+from util.batch_transfer import BatchTransfer
 from util.communicator import Communicator
 from util.enum.command import Command
 from util.enum.signal import Signal
@@ -71,6 +72,7 @@ class ServerCommander():
 		self.username = None
 
 		self.communicator = Communicator(connection)
+		self.batch_transfer = BatchTransfer(self.communicator)
 
 		self.commands = {
 			Command.LOGIN : self.login, 
@@ -220,7 +222,7 @@ class ServerCommander():
 			color_print("No images similar to the provided image were found", color='magenta')
 			self.communicator.send_enum(Signal.NO_RESULTS)
 
-		self.send_images_in_batches(len(neighbour_ids), self.db.get_image_attributes, [neighbour_ids])
+		self.batch_transfer.send_images_in_batches(len(neighbour_ids), self.db.get_image_attributes, [neighbour_ids])
 
 	def browse_by_tag(self):
 		"""Browses images (products) filtered by given tags.
@@ -241,92 +243,7 @@ class ServerCommander():
 			self.communicator.send_enum(Signal.NO_RESULTS)
 			return
 
-		self.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images_with_tags, [tags])
-
-	def send_images_in_batches(self, image_count, retrieve_func, retrieve_args, batch_size=5):
-		"""Sends images to the client in batches.
-		
-		Given a number of available images to be sent, batches of those images are packaged 
-		together and sent in units until the images are exhausted, or the user has declined 
-		to received more images.
-		
-		Args:
-			image_count (int): The total number of images that could be sent.
-			retrieve_func (function): A function that returns a list of tuples where each 
-									  tuple contains: (path to image, quantity, cost). This
-									  function should retrieve batch_size items.
-			retrieve_args (list): A list of any arguments to be passed to retrieve_func.
-			batch_size (int): The number of images to be included in a single batch. (default: {5})
-		"""
-		# send a signal to the client that images are about to be sent
-		self.communicator.send_enum(Signal.SEARCH_RESULTS)
-
-		# send images that do not quite amount to a full batch
-		if image_count < batch_size:
-			self.communicator.send_enum(Signal.START_TRANSFER)
-			images = retrieve_func(*retrieve_args)
-			self.send_batch_of_images(images)
-			self.communicator.send_enum(Signal.END_TRANSFER)
-			return
-
-		# keep sending images in batches until the user sends a stop signal or there are no more images
-		images_sent = 0
-		self.communicator.send_enum(Signal.START_TRANSFER)
-
-		while image_count - images_sent > 0:
-			images = retrieve_func(*retrieve_args, offset=images_sent)
-			self.send_batch_of_images(images) 
-
-			# if there are more images left to be sent beyond this batch, let the client know
-			# then wait for their response as to whether another batch should be sent
-			if image_count - images_sent > batch_size:
-				self.communicator.send_enum(Signal.CONTINUE_TRANSFER)
-				if self.communicator.receive_enum(Signal) == Signal.END_TRANSFER:
-					color_print("Client has stopped requesting images", color='blue')
-					break
-			else: 
-				self.communicator.send_enum(Signal.END_TRANSFER)
-				break
-
-			images_sent += batch_size
-
-	class ImageInfo:
-		def __init__(self, db_image):
-			self.id = db_image[0]
-			self.path = Path(db_image[1])
-			self.quantity = db_image[2]
-			self.cost = db_image[3]
-
-		def __str__(self):
-			return "[%d] %s (%d, $%.2f)" % (self.id, str(self.path), self.quantity, self.cost)
-
-	def send_batch_of_images(self, images):
-		"""Sends a batch of images to the client. 
-		
-		Signals to the client that a batch is about to be sent, then sends each image 
-		individually with a signal that an image about to be sent before each one. Once
-		the batch is exhausted, a signal is sent that the batch has been completed. 
-		
-		Args:
-			images (list(tuple)): A list of tuples where each tuple contains information
-								  about an image (path, quantity, cost).
-		"""
-		self.communicator.send_enum(Signal.START_BATCH)
-
-		for image in images:
-			self.communicator.send_enum(Signal.CONTINUE_BATCH)
-			self.send_image_to_client(self.ImageInfo(image))
-		
-		self.communicator.send_enum(Signal.END_BATCH)
-
-	def send_image_to_client(self, image):
-		color_print("Sending image %s to client" % str(image), color='green')
-
-		self.communicator.send_int(image.id)
-		self.communicator.send_image(image.path)
-		self.communicator.send_string(image.path.name)
-		self.communicator.send_float(image.cost)
-		self.communicator.send_int(image.quantity)
+		self.batch_transfer.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images_with_tags, [tags])
 
 	def save_image_to_directory(self, directory, image, filename):
 		"""Saves an image into a directory.

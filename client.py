@@ -10,7 +10,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 
 from util.communicator import Communicator
-from util.input import prompt_for_integers, prompt_for_selection_and_quantity, prompt_for_binary_choice
+from util.batch_transfer import BatchTransfer
+from util.input import prompt_for_integers, prompt_for_selection_and_quantity
 from util.enum.command import Command
 from util.enum.signal import Signal
 from util.enum.tags import Tags
@@ -83,7 +84,7 @@ class ClientPrompt(cmd2.Cmd):
 		self.user = None 
 		self.shopping_cart = self.ShoppingCart()
 		self.communicator = Communicator()
-		plt.switch_backend('Qt5Agg') #TODO: move plotting stuff to another file
+		self.batch_transfer = BatchTransfer(self.communicator)
 		super().__init__()
 
 	def check_if_logged_in(self):
@@ -233,7 +234,7 @@ class ClientPrompt(cmd2.Cmd):
 			color_print("No images similar to the provided image were found", color='magenta')
 			return
 
-		self.receive_batches_of_images()
+		self.batch_transfer.receive_batches_of_images(self.add_to_cart_prompt)
 
 	def do_browse_by_tag(self, args):
 		"""Browses for images (products) matching the given tag(s).
@@ -263,39 +264,7 @@ class ClientPrompt(cmd2.Cmd):
 			color_print("No matches found for the given tags", color='magenta')
 			return
 
-		self.receive_batches_of_images()
-
-	def receive_batches_of_images(self):
-		"""Receives batches of images from the server.
-		
-		Receives one or more batches of images from the server. Waits until the server
-		signals that it will begin sending and receives the continuously waits for signals 
-		indicating the beginning/end of an individual image or batch. Prompts the user 
-		to continue after each batch and signals the end transfer accordingly.
-		"""
-		# keep processing batches unless the server signals otherwise
-		signal = self.communicator.receive_enum(Signal) 
-		while signal != Signal.END_TRANSFER:
-			image_batch = list()
-
-			# within a batch keep receiving images until the server signals a stop
-			if self.communicator.receive_enum(Signal) == Signal.START_BATCH:
-				while self.communicator.receive_enum(Signal) != Signal.END_BATCH:
-					self.receive_image(image_batch)
-
-				self.display_batch_of_images(image_batch)
-				self.add_to_cart_prompt(image_batch)
-
-			# the server will signal whether it has more images to send
-			signal = self.communicator.receive_enum(Signal) 
-
-			if signal == Signal.CONTINUE_TRANSFER:
-				show_next = prompt_for_binary_choice("Display more images? (y/n) ")
-				if show_next == 'y':
-					self.communicator.send_enum(Signal.CONTINUE_TRANSFER) 
-				else: 
-					self.communicator.send_enum(Signal.END_TRANSFER)
-					break
+		self.batch_transfer.receive_batches_of_images(self.add_to_cart_prompt)
 
 	def add_to_cart_prompt(self, image_batch):
 		"""Prompts the user to enter desired products and quantities.
@@ -323,66 +292,6 @@ class ClientPrompt(cmd2.Cmd):
 				self.shopping_cart.add_to_cart(image_product)
 			else:
 				color_print("Error: Quantity entered for [%d] exceeds existing stock of %d" % (image_product.image_id, image_product.stock), color='red')
-
-	def receive_image(self, image_batch):
-		"""Receives an image from the server and adds it to the batch.
-		
-		Receives the image and related information from the server and adds all 
-		of the information to the batch as a tuple.
-		
-		Args:
-			image_batch (list(tuple)): A list representing a batch of images, each
-									   image in the batch is a tuple.
-		"""
-		image_id = self.communicator.receive_int()
-		image = self.communicator.receive_image()
-		filename = self.communicator.receive_string()
-		cost = self.communicator.receive_float()
-		quantity = self.communicator.receive_int()
-
-		selection_id = color_str("[%d] " % image_id, color='cyan')
-		image_details = color_str("%s (%d, $%.2f)" % (filename, quantity, cost), color='blue')
-		print(selection_id + image_details)
-
-		image_batch.append((image_id, image, filename, cost, quantity))
-
-	def display_batch_of_images(self, images):
-		"""Displays the provided images.
-		
-		Creates a figure in pyplot consisting of a row for each image. The image is displayed 
-		in the left column and image information is displayed on the right. 
-		
-		Args:
-			images (list(tuple)): A list where each element is a tuple (image data, filename, 
-								  quantity, cost).
-		"""
-		figure = plt.figure(figsize=(5,10))
-
-		columns = 2
-		rows = len(images)
-
-		j = 1
-
-		for i in range(rows):
-			(image_id, image, filename, cost, quantity) = images[i]
-
-			figure.add_subplot(rows, columns, j)
-			plt.axis('off')
-			plt.imshow(image)
-
-			ax = figure.add_subplot(rows, columns, j+1)
-			image_data = "[%s]" % filename
-			ax.text(0.5, 0.75, image_data, size=12, ha='center', va='center', wrap=True)
-			image_data = "Stock: %d" % quantity
-			ax.text(0.5, 0.5, image_data, size=12, ha='center', va='center', wrap=True)
-			image_data = "Price: $%.2f" % cost
-			ax.text(0.5, 0.25, image_data, size=12, ha='center', va='center', wrap=True)
-			plt.axis('off')
-
-			j += 2
-
-		plt.axis('off')
-		plt.show(block=True)
 
 	def do_view_cart(self, args):
 		"""Display contents of cart.
