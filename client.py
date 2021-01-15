@@ -1,17 +1,20 @@
 
 import cmd2
 from cmd2 import with_argparser
+
 import getpass
 import argparse
-
+from pathlib import Path
 
 from lazyme.string import color_print, color_str
-from pathlib import Path
+
 import matplotlib.pyplot as plt
 
-from util.communicator import Communicator
 from util.batch_transfer import BatchTransfer
+from util.communicator import Communicator
 from util.input import prompt_for_integers, prompt_for_selection_and_quantity
+from util.shopping import ShoppingCart, Product
+
 from util.enum.command import Command
 from util.enum.signal import Signal
 from util.enum.tags import Tags
@@ -39,50 +42,9 @@ class ClientPrompt(cmd2.Cmd):
 	intro =  color_str("Welcome to Image Repository. Type ? to list commands", color='blue')
 	goodbye =  color_str("Thank you for using Image Repository. Goodbye.", color='blue')
 
-	# TODO: document (also maybe move to another file?)
-	class ShoppingCart:
-		def __init__(self):
-			self.cart = list()
-
-		def add_to_cart(self, product):
-			#TODO: check if item already in cart and update quantity
-			#	   plus remove from cart if stock is 0
-			if product.quantity > 0:
-				self.cart.append(product)
-
-		def display_cart(self):
-			total = 0
-
-			for product in self.cart:
-				color_print(str(product), color='yellow')
-				total += product.total()
-
-			color_print("="*50, color='yellow')
-			color_print("Total: $%.2f" % total, color='yellow')
-
-
-	# TODO: document (also maybe move to another file?)
-	class Product:
-		def __init__(self, image_info):
-			self.image_id = image_info[0]
-			self.image = image_info[1]
-			self.filename = image_info[2]
-			self.cost = image_info[3]
-			self.stock = image_info[4]
-			self.quantity = 0
-
-		def set_quantity(self, quantity):
-			self.quantity = quantity
-
-		def total(self):
-			return self.quantity * self.cost
-
-		def __str__(self):
-			return "[%d] %s (%d/%d, $%.2f)" % (self.image_id, self.filename, self.quantity, self.stock, self.cost)
-
 	def __init__(self):
 		self.user = None 
-		self.shopping_cart = self.ShoppingCart()
+		self.shopping_cart = ShoppingCart()
 		self.communicator = Communicator()
 		self.batch_transfer = BatchTransfer(self.communicator)
 		super().__init__()
@@ -285,10 +247,10 @@ class ClientPrompt(cmd2.Cmd):
 
 			(product_id, quantity) = response
 
-			image_product = self.Product([image for image in image_batch if image[0] == product_id].pop())
+			image_product = Product([image for image in image_batch if image[0] == product_id].pop())
 
 			if quantity <= image_product.stock:
-				image_product.set_quantity(quantity)
+				image_product.quantity = quantity
 				self.shopping_cart.add_to_cart(image_product)
 			else:
 				color_print("Error: Quantity entered for [%d] exceeds existing stock of %d" % (image_product.image_id, image_product.stock), color='red')
@@ -300,8 +262,41 @@ class ClientPrompt(cmd2.Cmd):
 		Total is also listed. 
 		""" 
 		self.check_if_logged_in()
-
 		self.shopping_cart.display_cart()
+
+	argparser_remove_from_cart = argparse.ArgumentParser()
+	argparser_remove_from_cart.add_argument('product_id', type=int, help='id of an image (product)')
+
+	@with_argparser(argparser_remove_from_cart)
+	def remove_from_cart(self, opts):
+		"""Removes a product from the cart.
+
+		If the product exists in the cart it is removed. If the product was not in the cart a warning 
+		is displayed to the user.
+		
+		Args: (with argparser opts)
+			product_id (int): The id of the product that should be removed. 
+		"""
+		self.check_if_logged_in()
+		self.shopping_cart.remove_from_cart(opts.product_id)	
+
+	argparser_update_cart = argparse.ArgumentParser()
+	argparser_update_cart.add_argument('product_id', type=int, help='id of an image (product)')
+	argparser_update_cart.add_argument('quantity', type=int, help='new quantity of the image (product)')
+
+	@with_argparser(argparser_update_cart)
+	def remove_from_cart(self, opts):
+		"""Updates the quantity of a product in the cart.
+
+		If the product exists in the cart it is updated with the new quantity. If the product was not in 
+		the cart a warning is displayed to the user.
+		
+		Args: (with argparser opts)
+			product_id (int): The id of the product that should be updated. 
+			quantity (int): The updated quantity of the product. 
+		"""
+		self.check_if_logged_in()
+		self.shopping_cart.update_in_cart((opts.product_id, opts.quantity)
 
 	def do_exit(self, args):
 		"""Exits the image repository.
