@@ -198,7 +198,8 @@ class ServerCommander():
 		"""Searches images (products) similar to the provided image.
 		
 		Receives an image from the client, computes a feature vector, and computes 
-		the nearest neighbours of the image within the image repository. 
+		the nearest neighbours of the image within the image repository. The similar 
+		images are sent in order of most similar to least in batches to the client. 
 		"""
 		if not self.check_if_logged_in():
 			return
@@ -221,10 +222,25 @@ class ServerCommander():
 
 		self.send_images_in_batches(len(neighbour_ids), self.db.get_image_attributes, [neighbour_ids])
 
-		# first send the client the number of neighbours to expect, then send them individually
-		# self.communicator.send_int(len(neighbours))
-		# for neighbour in neighbours:
-		# 	self.send_image_to_client(self.db.get_image_attributes(neighbour))
+	def browse_by_tag(self):
+		"""Browses images (products) filtered by given tags.
+		
+		Receives tag identifiers from the client and queries the database for images 
+		matching all of the tags. If no tags are provided, all images are considered to 
+		be matches. Matching images are sent in batches to the client. 
+		"""
+		if not self.check_if_logged_in():
+			return
+
+		tags = self.communicator.receive_list()
+
+		images_to_be_displayed = self.db.count_images_with_tags(tags)
+
+		if images_to_be_displayed == 0:
+			color_print("No images found matching the given tags", color='magenta')
+			self.communicator.send_enum(Signal.NO_RESULTS)
+
+		self.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images_with_tags, [tags])
 
 	def send_images_in_batches(self, image_count, retrieve_func, retrieve_args, batch_size=5):
 		"""Sends images to the client in batches.
@@ -274,34 +290,43 @@ class ServerCommander():
 
 			images_sent += batch_size
 
-	def browse_by_tag(self):
-		if not self.check_if_logged_in():
-			return
+	class ImageInfo:
+		def __init__(self, db_image):
+			self.id = db_image[0]
+			self.path = Path(db_image[1])
+			self.quantity = db_image[2]
+			self.cost = db_image[3]
 
-		tags = self.communicator.receive_list()
+		def __str__(self):
+			return "[%d] %s (%d, $%.2f)" % (self.id, str(self.path), self.quantity, self.cost)
 
-		images_to_be_displayed = self.db.count_images_with_tags(tags)
-
-		if images_to_be_displayed == 0:
-			color_print("No images found matching the given tags", color='magenta')
-			self.communicator.send_enum(Signal.NO_RESULTS)
-
-		self.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images_with_tags, [tags])
-
-	def send_batch_of_images(self, images, offset=0):
+	def send_batch_of_images(self, images):
+		"""Sends a batch of images to the client. 
+		
+		Signals to the client that a batch is about to be sent, then sends each image 
+		individually with a signal that an image about to be sent before each one. Once
+		the batch is exhausted, a signal is sent that the batch has been completed. 
+		
+		Args:
+			images (list(tuple)): A list of tuples where each tuple contains information
+								  about an image (path, quantity, cost).
+		"""
 		self.communicator.send_enum(Signal.START_BATCH)
+
 		for image in images:
 			self.communicator.send_enum(Signal.CONTINUE_BATCH)
-			self.send_image_to_client(image_path=Path(image[0]), quantity=image[1], cost=image[2])
+			self.send_image_to_client(self.ImageInfo(image))
+		
 		self.communicator.send_enum(Signal.END_BATCH)
 
-	def send_image_to_client(self, image_path, quantity, cost):
-		color_print(str((image_path, quantity, cost)), color='green')
+	def send_image_to_client(self, image):
+		color_print("Sending image %s to client" % str(image), color='green')
 
-		self.communicator.send_image(image_path)
-		self.communicator.send_string(image_path.name)
-		self.communicator.send_float(cost)
-		self.communicator.send_int(quantity)
+		self.communicator.send_int(image.id)
+		self.communicator.send_image(image.path)
+		self.communicator.send_string(image.path.name)
+		self.communicator.send_float(image.cost)
+		self.communicator.send_int(image.quantity)
 
 	def save_image_to_directory(self, directory, image, filename):
 		"""Saves an image into a directory.

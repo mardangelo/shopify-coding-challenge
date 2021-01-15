@@ -267,6 +267,13 @@ class ClientPrompt(cmd2.Cmd):
 		self.receive_batches_of_images()
 
 	def receive_batches_of_images(self):
+		"""Receives batches of images from the server.
+		
+		Receives one or more batches of images from the server. Waits until the server
+		signals that it will begin sending and receives the continuously waits for signals 
+		indicating the beginning/end of an individual image or batch. Prompts the user 
+		to continue after each batch and signals the end transfer accordingly.
+		"""
 		# keep processing batches unless the server signals otherwise
 		signal = self.communicator.receive_enum(Signal) 
 		while signal != Signal.END_TRANSFER:
@@ -275,16 +282,7 @@ class ClientPrompt(cmd2.Cmd):
 			# within a batch keep receiving images until the server signals a stop
 			if self.communicator.receive_enum(Signal) == Signal.START_BATCH:
 				while self.communicator.receive_enum(Signal) != Signal.END_BATCH:
-					image = self.communicator.receive_image()
-					filename = self.communicator.receive_string()
-					cost = self.communicator.receive_float()
-					quantity = self.communicator.receive_int()
-
-					image_batch.append((image, filename, cost, quantity))
-
-					image_id = color_str("[%d] " % len(image_batch), color='cyan')
-					image_details = color_str("%s (%d, %.2f)" % (filename, quantity, cost), color='blue')
-					print(image_id + image_details)
+					self.receive_image(image_batch)
 
 				self.display_batch_of_images(image_batch)
 
@@ -300,6 +298,28 @@ class ClientPrompt(cmd2.Cmd):
 				else: 
 					self.communicator.send_enum(Signal.END_TRANSFER)
 					break
+
+	def receive_image(self, image_batch):
+		"""Receives an image from the server and adds it to the batch.
+		
+		Receives the image and related information from the server and adds all 
+		of the information to the batch as a tuple.
+		
+		Args:
+			image_batch (list(tuple)): A list representing a batch of images, each
+									   image in the batch is a tuple.
+		"""
+		image_id = self.communicator.receive_int()
+		image = self.communicator.receive_image()
+		filename = self.communicator.receive_string()
+		cost = self.communicator.receive_float()
+		quantity = self.communicator.receive_int()
+
+		selection_id = color_str("[%d] " % len(image_batch), color='cyan')
+		image_details = color_str("%s (%d, $%.2f)" % (filename, quantity, cost), color='blue')
+		print(selection_id + image_details)
+
+		image_batch.append((image_id, image, filename, cost, quantity))
 
 	def display_batch_of_images(self, images):
 		"""Displays the provided images.
@@ -319,7 +339,7 @@ class ClientPrompt(cmd2.Cmd):
 		j = 1
 
 		for i in range(rows):
-			(image, filename, cost, quantity) = images[i]
+			(image_id, image, filename, cost, quantity) = images[i]
 
 			figure.add_subplot(rows, columns, j)
 			plt.axis('off')
@@ -330,7 +350,7 @@ class ClientPrompt(cmd2.Cmd):
 			ax.text(0.5, 0.75, image_data, size=12, ha='center', va='center', wrap=True)
 			image_data = "Stock: %d" % quantity
 			ax.text(0.5, 0.5, image_data, size=12, ha='center', va='center', wrap=True)
-			image_data = "Price: %.2f" % cost
+			image_data = "Price: $%.2f" % cost
 			ax.text(0.5, 0.25, image_data, size=12, ha='center', va='center', wrap=True)
 			plt.axis('off')
 

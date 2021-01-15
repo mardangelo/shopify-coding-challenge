@@ -212,16 +212,16 @@ class Database():
 
 		Returns:
 			list(tuple): A list where each element is a tuple representing an image and containing 
-						 (path to image, quantity, cost).
+						 (id, path to image, quantity, cost).
 		"""
 		if not tags: 
-			return self.session.query(Image.image_path, Image.quantity, Image.cost) \
+			return self.session.query(Image.id, Image.image_path, Image.quantity, Image.cost) \
 							   .offset(offset).limit(batch_size).all()
 
 		matching_images = self.build_select_images_with_tags_query(tags).subquery()
 		first_column = next(iter(matching_images.c)) # get a reference to the column of image ids
 
-		return self.session.query(Image.image_path, Image.quantity, Image.cost) \
+		return self.session.query(Image.id, Image.image_path, Image.quantity, Image.cost) \
 						   .join(matching_images, first_column == Image.id) \
 						   .offset(offset).limit(batch_size).all()
 
@@ -242,12 +242,12 @@ class Database():
 		
 		Returns:
 			list(tuple): A list of tuples where each tuple contains the attributes of a single
-						 image (path, quantity, cost).
+						 image (id, path, quantity, cost).
 		"""
 		images = list()
 
 		for image_id in image_ids[offset:(offset + batch_size)]:
-			image = self.session.query(Image.image_path, Image.quantity, Image.cost) \
+			image = self.session.query(Image.id, Image.image_path, Image.quantity, Image.cost) \
 						        .filter_by(id=image_id).one()
 			images.append(image)
 
