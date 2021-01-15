@@ -161,7 +161,8 @@ class ClientPrompt(cmd2.Cmd):
 		if not self.check_if_logged_in():
 			return 
 
-		tags = self.prompt_user_for_tags()
+		Tags.display_tags_for_selection()
+		tags = prompt_for_integers(list(map(int, Tags))) 
 		
 		self.send_command(Command.ADD_IMAGE)
 
@@ -223,7 +224,7 @@ class ClientPrompt(cmd2.Cmd):
 			return
 
 		Tags.display_tags_for_selection()
-
+		color_print("Note: if no tags are selected, browse will return all images in the repository", color='blue')
 		tags = prompt_for_integers(list(map(int, Tags))) 
 
 		self.send_command(Command.BROWSE_BY_TAG)
