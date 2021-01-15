@@ -19,11 +19,6 @@ from util.enum.command import Command
 from util.enum.signal import Signal
 from util.enum.tags import Tags
 
-#TODO: rename util to shared?
-#TODO: create a demo database so they don't have to upload files with prices and tags, etc.
-#	   maybe do a database of photos of mythological figures? or just from hades? and price
-#	   them based on how much I like them...
-
 class ClientPrompt(cmd2.Cmd):
 	"""Interface for user to interact with image repository.
 	
@@ -47,7 +42,22 @@ class ClientPrompt(cmd2.Cmd):
 		self.shopping_cart = ShoppingCart()
 		self.communicator = Communicator()
 		self.batch_transfer = BatchTransfer(self.communicator)
+
 		super().__init__()
+
+		del cmd2.Cmd.do_quit
+
+		self.hidden_commands.append('py')
+		self.hidden_commands.append('alias')
+		self.hidden_commands.append('edit')
+		self.hidden_commands.append('history')
+		self.hidden_commands.append('macro')
+		self.hidden_commands.append('run_pyscript')
+		self.hidden_commands.append('run_script')
+		self.hidden_commands.append('quit')
+		self.hidden_commands.append('set')
+		self.hidden_commands.append('shell')
+		self.hidden_commands.append('shortcuts')
 
 	def check_if_logged_in(self):
 		"""Checks if the user has successfully logged in.
@@ -253,7 +263,7 @@ class ClientPrompt(cmd2.Cmd):
 				image_product.quantity = quantity
 				self.shopping_cart.add_to_cart(image_product)
 			else:
-				color_print("Error: Quantity entered for [%d] exceeds existing stock of %d" % (image_product.image_id, image_product.stock), color='red')
+				color_print("Error: Quantity entered for [%d] exceeds existing stock of %d" % (image_product.id, image_product.stock), color='red')
 
 	def do_view_cart(self, args):
 		"""Display contents of cart.
@@ -268,7 +278,7 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_remove_from_cart.add_argument('product_id', type=int, help='id of an image (product)')
 
 	@with_argparser(argparser_remove_from_cart)
-	def remove_from_cart(self, opts):
+	def do_remove_from_cart(self, opts):
 		"""Removes a product from the cart.
 
 		If the product exists in the cart it is removed. If the product was not in the cart a warning 
@@ -285,7 +295,7 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_update_cart.add_argument('quantity', type=int, help='new quantity of the image (product)')
 
 	@with_argparser(argparser_update_cart)
-	def remove_from_cart(self, opts):
+	def do_update_in_cart(self, opts):
 		"""Updates the quantity of a product in the cart.
 
 		If the product exists in the cart it is updated with the new quantity. If the product was not in 
@@ -296,7 +306,7 @@ class ClientPrompt(cmd2.Cmd):
 			quantity (int): The updated quantity of the product. 
 		"""
 		self.check_if_logged_in()
-		self.shopping_cart.update_in_cart((opts.product_id, opts.quantity)
+		self.shopping_cart.update_in_cart(opts.product_id, opts.quantity)
 
 	def do_exit(self, args):
 		"""Exits the image repository.
@@ -306,7 +316,6 @@ class ClientPrompt(cmd2.Cmd):
 		print(self.goodbye)
 
 		try:
-			#TODO: add a timeout for this send
 			self.send_command(Command.EXIT)
 		except (BrokenPipeError, ConnectionError):
 			pass

@@ -11,7 +11,7 @@ from lazyme.string import color_print
 from .cipher import Cipher
 from .enum.signal import Signal
 
-DEBUG = True
+DEBUG = False
 
 class Code(Enum):
 	"""Short codes used for communication. 
@@ -365,10 +365,6 @@ class Communicator:
 		Raises:
 			ConnectionError: If data has not been received.
 		"""
-		#TODO: recv is blocking, use select to wait until data is available?
-		#	   this may have been fixed already, but remember this if the server hangs
-		#	   after the client disconnects (b/c it is waiting for a command)
-
 		data = bytearray()
 
 		while len(data) < length:

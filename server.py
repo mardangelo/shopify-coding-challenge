@@ -22,6 +22,8 @@ def main():
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 		s.bind((HOST, PORT))
 
+		color_print("Listening for connections...", color='green')
+
 		while True:
 			s.listen()
 
@@ -44,10 +46,8 @@ def main():
 				color_print("Client %s disconnected" % str(addr), color='blue')
 
 class ClientDisconnectException(Exception):
+	"""Exception for when a client has disconnected."""
 	pass						
-
-# TODO: make sure there is an API so someone can, say, populate the database using a script
-# 		instead of going through the effort that is the client one by one
 
 class ServerCommander():
 	"""Receives commands from the client and processes them. 
@@ -172,10 +172,12 @@ class ServerCommander():
 		
 		Receives the encrypted image, filename, price, and quantity from the client
 		and saves the image to disk. The database is populated with the remaining information.
+		
+		Future Work: Save the encrypted images to disk using random filenames. The code for 
+					 encrypting an decrypting is here, and the image is actually received 
+					 encrypted. Just need to decrypt after reading from disk. Latency will
+					 increase a bit, espeically when serving large numbers of images.
 		"""
-		#TODO: is there a reason why the image wouldn't be added succesfully? Should image names be unique?
-		# Or are similarity vectors the proper way to go?
-
 		if not self.check_if_logged_in():
 			return
 
@@ -269,8 +271,6 @@ class ServerCommander():
 		Returns:
 			Path: path to the saved image file.
 		"""
-		#TODO: does it matter how the main program is executed? 
-		#      will it change where the directory is? does it matter?
 		image_directory = Path(directory) 
 		image_directory.mkdir(parents=True, exist_ok=True)
 		image_path = image_directory / filename # append to path, uses '/' operator
@@ -297,7 +297,6 @@ class ServerCommander():
 		"""Closes any open connections (e.g., database)."""
 		self.db.close_connection()
 		self.communicator.shutdown()
-		color_print("Client disconnected", 'blue')
 		raise ClientDisconnectException
 
 if __name__ == '__main__':

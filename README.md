@@ -1,39 +1,46 @@
 # shopify-coding-challenge
 Summer 2021 - Shopify Developer Intern Coding Challenge
 
-You can save your work in a text file, link, etc. and have it ready with you for your technical interview (you can also add it on GitHub). 
+A prototype of an image repository that is managed by a server, which can be manipulated by the provided client application.
 
-## TASK: Build an image repository.
+## Features
 
-You can tackle this challenge using any technology you want. This is an open-ended task.
+Images can be uploaded by the client to the server where they are saved to disk and recorded into 
+the database. 
 
-Please provide brief instructions on how to use your application.
+All encryption between the client and server is encrypted and authenticated. 
 
-Extra Information: You can, if you wish, use frameworks, libraries and external dependencies to help you get faster to the parts you are interested in building, if this helps you; or start from scratch.
+Users can browse images in the repository by tags (or simply view all images). Users can also search for images similar to one that they provide. 
 
-Please focus on what interests you the most. If you need inspiration, here are examples of what you can work on. IF you work on these ideas, we recommend choosing only one or two.
+Requested images are served to the client in batches that are displayed one batch at a time in a 
+graphical manner, subsequent batches are only sent if the user requests it. 
 
-### Ideas:
+Basic client side shopping cart functionality (add, update, remove). 
 
-SEARCH function
-* from characteristics of the images
-* from text
-* from an image (search for similar images)
+## Setup
 
+Due to incompatibilities between TensorFlow and newer Python versions, this prototype must be run using Python 3.8.x or lower. It has been developed and tested with Python 3.8.3. Ensure that you have pip3 installed.
 
-ADD image(s) to the repository
-* one / bulk / enormous amount of images
-* private or public (permissions)
-* secure uploading and stored images
+Install the required python packages using pip:
 
-DELETE image(s)
-* one / bulk / selected / all images
-* Prevent a user deleting images from another user (access control)
-* secure deletion of images
+```pip3 install -r requirements.txt```
 
-SELL/BUY images
-* ability to manage inventory
-* set price
-* discounts
-* handle money
+Install [SQLite3](https://www.sqlite.org/download.html).
 
+## Usage
+
+1. First start up the server using:
+
+```python3 server.py```
+
+The server takes a moment to initialize, but once it displays ```Listening for connections...``` the client can connect without errors. 
+
+2. In another terminal tab/window start the client: 
+
+```python3 client.py```
+
+3. The client is implemented using cmd2 and can display the list of available commands using ```?``` and can display further information about any given command ```help <command_name>```.
+
+###
+
+TODO: create a sample database with colours as tags and simple images like logos (maybe modify server so it can be modified using a script?)

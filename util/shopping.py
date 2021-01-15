@@ -42,7 +42,7 @@ class ShoppingCart:
 			return
 
 		if product.quantity > 0:
-			color_print("Product [%d] was added to cart", color='blue')
+			color_print("Product [%d] was added to cart" % product.id, color='blue')
 			self.cart[product.id] = product
 
 	def remove_from_cart(self, product_id):
@@ -55,9 +55,9 @@ class ShoppingCart:
 			product_id (int): The id of the product to be removed.
 		"""
 		if not self.cart.pop(product_id, None):
-			color_print("Warning: Product [%d] was not in the cart", color='magenta')
+			color_print("Warning: Product [%d] was not in the cart" % product_id, color='magenta')
 		else:
-			color_print("Product [%d] was removed from cart", color='blue')
+			color_print("Product [%d] was removed from cart" % product_id, color='blue')
 
 	def update_in_cart(self, product_id, quantity):
 		"""Updates the quantity of a product in the cart."
@@ -81,8 +81,13 @@ class ShoppingCart:
 			self.remove_from_cart(product_id)
 			return
 
-		color_print("Updating quantity of product [%d]" % product_id, color='blue')
 		original = self.cart[product_id]
+
+		if quantity > original.stock:
+			color_print("Error: requested quantity exceeds stocked amount %d" % original.stock, color='red')
+			return
+
+		color_print("Updating quantity of product [%d]" % product_id, color='blue')
 		original.quantity = quantity
 
 	def display_cart(self):

@@ -115,12 +115,18 @@ class Database():
 
 		return result
 
-	#TODO: should I implement unique(filename,feature_vector)? would need to rename files...
 	def add_image(self, path, feature_vector, quantity, cost, username):
 		"""Adds an image to the repository. 
 		
 		Stores information about the image as well as a path to the image file. If an image
-		by the same name already exists in the database it is not added again. 
+		by the same name already exists in the database it is not added again. Note: this 
+		implementation relies on the filename being unique. There is a tradeoff between allowing 
+		duplicates (redundancy, database size, access times, etc.) and trying to prevent duplicates 
+		by using another attribute. Feature vectors could be considered, but since they are by 
+		definition a reduction in dimensionality there is no guarantee that images won't collide 
+		even if they are not different. A real implementation should evaluate other options and
+		possible tradeoffs. Low hanging fruit may be (filename, feature_vector) combination, but 
+		it may still result in redundant database entries.
 		
 		Args:
 			path (str): Path to the image file on disk. 

@@ -9,5 +9,6 @@ pycryptodome==3.9.9
 PyQt5==5.15.2
 scipy==1.6.0
 SQLAlchemy==1.3.22
+tabulate==0.8.7
 tensorflow==2.4.0
 tensorflow-hub==0.11.0
