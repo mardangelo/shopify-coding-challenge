@@ -23,7 +23,7 @@ Basic client side shopping cart functionality (add, update, remove).
 
 * Install the required python packages using pip:
 
-```pip3 install -r requirements.txt```
+	```pip3 install -r requirements.txt```
 
 * Install [SQLite3](https://www.sqlite.org/download.html).
 
@@ -31,16 +31,16 @@ Basic client side shopping cart functionality (add, update, remove).
 
 1. First start up the server using:
 
-```python3 server.py```
+	```python3 server.py```
 
-The server takes a moment to initialize, but once it displays ```Listening for connections...``` the client can connect without errors. 
+	The server takes a moment to initialize, but once it displays ```Listening for connections...``` the client can connect without errors. 
 
 2. In another terminal tab/window start the client: 
 
-```python3 client.py```
+	```python3 client.py```
 
 3. The client is implemented using cmd2 and can display the list of available commands using ```?``` and can display further information about any given command ```help <command_name>```.
 
-###
+### TODOs
 
-TODO: create a sample database with colours as tags and simple images like logos (maybe modify server so it can be modified using a script?)
+Create a sample database with colours as tags and simple images like logos (maybe modify server so it can be modified using a script?)
