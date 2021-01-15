@@ -1,6 +1,6 @@
 
 import cmd2
-from cmd2 import with_argparser
+from cmd2 import with_argparser, with_category
 
 import getpass
 import argparse
@@ -37,6 +37,10 @@ class ClientPrompt(cmd2.Cmd):
 	intro =  color_str("Welcome to Image Repository. Type ? to list commands", color='blue')
 	goodbye =  color_str("Thank you for using Image Repository. Goodbye.", color='blue')
 
+	CMD_CAT_USER_MANAGEMENT = "User Management"
+	CMD_CAT_IMAGE_REPOSITORY = "Image Repository"
+	CMD_CAT_SHOPPING_CART = "Shopping Cart"
+
 	def __init__(self):
 		self.user = None 
 		self.shopping_cart = ShoppingCart()
@@ -59,6 +63,9 @@ class ClientPrompt(cmd2.Cmd):
 		self.hidden_commands.append('shell')
 		self.hidden_commands.append('shortcuts')
 
+		self.disable_category(self.CMD_CAT_IMAGE_REPOSITORY, "You must be logged in to manipulate the repository")
+		self.disable_category(self.CMD_CAT_SHOPPING_CART, "You must be logged in to manage your shopping cart")
+
 	def check_if_logged_in(self):
 		"""Checks if the user has successfully logged in.
 		
@@ -75,6 +82,7 @@ class ClientPrompt(cmd2.Cmd):
 		
 		return not is_not_logged_in
 
+	@with_category(CMD_CAT_USER_MANAGEMENT)
 	def do_create_user(self, username):
 		"""Creates a user with the given username.
 		
@@ -105,6 +113,7 @@ class ClientPrompt(cmd2.Cmd):
 		else: 
 			color_print("Error: User already exists", color='red')
 
+	@with_category(CMD_CAT_USER_MANAGEMENT)
 	def do_login(self, username):
 		"""Logs user in as given username.
 		
@@ -128,6 +137,9 @@ class ClientPrompt(cmd2.Cmd):
 		if self.verify_password(username, password) == Signal.SUCCESS:
 			self.user = username
 			color_print("Successfully logged in as %s" % username, color='blue')
+
+			self.enable_category(self.CMD_CAT_IMAGE_REPOSITORY)
+			self.enable_category(self.CMD_CAT_SHOPPING_CART)
 		else:
 			# Note: failure could be owed to two reasons: (1) incorrect password, 
 			# (2) user doesn't exist. It is intentional that the status of a user
@@ -145,6 +157,7 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_add_image.add_argument('price', type=float, help='price of the image (product)')
 	argparser_add_image.add_argument('quantity', type=int, help='number of image (product) to stock')
 
+	@with_category(CMD_CAT_IMAGE_REPOSITORY)
 	@with_argparser(argparser_add_image)
 	def do_add_image(self, opts):
 		"""Adds an image (product) to Image Repository.
@@ -182,6 +195,7 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_search_by_image = argparse.ArgumentParser()
 	argparser_search_by_image.add_argument('path', type=str, help='path to an image file')
 
+	@with_category(CMD_CAT_IMAGE_REPOSITORY)
 	@with_argparser(argparser_search_by_image)
 	def do_search_by_image(self, opts):
 		"""Find images (products) similar to the provided image.
@@ -209,6 +223,7 @@ class ClientPrompt(cmd2.Cmd):
 
 		self.batch_transfer.receive_batches_of_images(self.add_to_cart_prompt)
 
+	@with_category(CMD_CAT_IMAGE_REPOSITORY)
 	def do_browse_by_tag(self, args):
 		"""Browses for images (products) matching the given tag(s).
 		
@@ -266,6 +281,7 @@ class ClientPrompt(cmd2.Cmd):
 			else:
 				color_print("Error: Quantity entered for [%d] exceeds existing stock of %d" % (image_product.id, image_product.stock), color='red')
 
+	@with_category(CMD_CAT_SHOPPING_CART)
 	def do_view_cart(self, args):
 		"""Display contents of cart.
 		
@@ -278,6 +294,7 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_remove_from_cart = argparse.ArgumentParser()
 	argparser_remove_from_cart.add_argument('product_id', type=int, help='id of an image (product)')
 
+	@with_category(CMD_CAT_SHOPPING_CART)
 	@with_argparser(argparser_remove_from_cart)
 	def do_remove_from_cart(self, opts):
 		"""Removes a product from the cart.
@@ -295,6 +312,7 @@ class ClientPrompt(cmd2.Cmd):
 	argparser_update_cart.add_argument('product_id', type=int, help='id of an image (product)')
 	argparser_update_cart.add_argument('quantity', type=int, help='new quantity of the image (product)')
 
+	@with_category(CMD_CAT_SHOPPING_CART)
 	@with_argparser(argparser_update_cart)
 	def do_update_in_cart(self, opts):
 		"""Updates the quantity of a product in the cart.

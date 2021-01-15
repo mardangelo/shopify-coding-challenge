@@ -38,7 +38,7 @@ class Database():
 		Creates the database and creates all of the tables that are defined as 
 		a subclass of Base in the program (as long as they have been imported).
 		"""
-		engine = create_engine('sqlite:///image-repository.sqlite', echo=True)
+		engine = create_engine('sqlite:///image-repository.sqlite', echo=False)
 
 		Session = sessionmaker(bind=engine)
 		self.session = Session()
