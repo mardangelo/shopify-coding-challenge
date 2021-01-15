@@ -1,15 +1,19 @@
 
 import cmd2
 from cmd2 import with_argparser
-from util.communicator import Communicator
 import getpass
 import argparse
-from util.enum.command import Command
-from util.enum.signal import Signal
-from util.enum.tags import Tags
+
+
 from lazyme.string import color_print, color_str
 from pathlib import Path
 import matplotlib.pyplot as plt
+
+from util.communicator import Communicator
+from util.input import prompt_for_integers, prompt_for_selection_and_quantity, prompt_for_binary_choice
+from util.enum.command import Command
+from util.enum.signal import Signal
+from util.enum.tags import Tags
 
 #TODO: rename util to shared?
 #TODO: create a demo database so they don't have to upload files with prices and tags, etc.
@@ -40,6 +44,8 @@ class ClientPrompt(cmd2.Cmd):
 			self.cart = list()
 
 		def add_to_cart(self, product):
+			#TODO: check if item already in cart and update quantity
+			#	   plus remove from cart if stock is 0
 			if product.quantity > 0:
 				self.cart.append(product)
 
@@ -245,7 +251,7 @@ class ClientPrompt(cmd2.Cmd):
 
 		Tags.display_tags_for_selection()
 
-		tags = self.prompt_for_comma_separated_integers(list(map(int, Tags))) 
+		tags = prompt_for_integers(list(map(int, Tags))) 
 
 		self.send_command(Command.BROWSE_BY_TAG)
 
@@ -284,7 +290,7 @@ class ClientPrompt(cmd2.Cmd):
 			signal = self.communicator.receive_enum(Signal) 
 
 			if signal == Signal.CONTINUE_TRANSFER:
-				show_next = input("Display more images? (y/n) ")
+				show_next = prompt_for_binary_choice("Display more images? (y/n) ")
 				if show_next == 'y':
 					self.communicator.send_enum(Signal.CONTINUE_TRANSFER) 
 				else: 
@@ -292,117 +298,31 @@ class ClientPrompt(cmd2.Cmd):
 					break
 
 	def add_to_cart_prompt(self, image_batch):
-		"""Prompts the user to select products and enter desired quantities.
+		"""Prompts the user to enter desired products and quantities.
 		
-		Receives a selection of products from the user as a list and subsequently prompts 
-		the user to enter a quantity for each item. The quantity must not exceed stock, 
-		if the user enters such a quantity, they will be prompted again.
+		Prompts the user to enter an item id and quantity or nothing at all if they do not wish 
+		to add any items to their cart. The quantity must not exceed stock, if the user enters 
+		such a quantity, they will have to repeat the request.
 		
 		Args:
 			image_batch (list(tuple)): A batch of images where each tuple is an image.
 		"""
-		products = self.prompt_for_comma_separated_integers([image[0] for image in image_batch])
+		prompt = True
+		while prompt:
+			response = prompt_for_selection_and_quantity([image[0] for image in image_batch])
 
-		color_print("Selected products: %s" % str(products), color='red')
+			if not response:
+				break
 
-		if not products:
-			return
+			(product_id, quantity) = response
 
-		for product in products:
-			valid_quantity = False
+			image_product = self.Product([image for image in image_batch if image[0] == product_id].pop())
 
-			while not valid_quantity:
-				input_message = color_str("Enter quantity for item [%d]: " % product, color='green')
-				quantity = self.prompt_for_positive_integer(input_message)
-
-				image_product = self.Product([image for image in image_batch if image[0] == product].pop())
-
-				if quantity <= image_product.stock:
-					image_product.set_quantity(quantity)
-					self.shopping_cart.add_to_cart(image_product)
-					valid_quantity = True
-				else:
-					color_print("Error: Quantity entered exceeds existing stock", color='red')
-
-	#TODO: move to a input_utils file (no class)
-	def prompt_for_comma_separated_integers(self, valid_values):
-		"""Prompts the user to select items using integer identifiers.
-		
-		Receives input from the user and validates it as a comma separated list of integers. 
-		The user may enter nothing, which results in no items being chosen. The user may enter 
-		a single integer, or the user may enter a comma separated list of integer. This prompt 
-		repeats until it meets a success condition. 
-		
-		Returns:
-			list(int): A list containing any tag identifiers selected by the user, or an empty list 
-				  	   if the user did not make any selections.
-		"""
-
-		# ask for input until successful in case of errors in entry
-		while True:
-			selection_raw = input(color_str("Enter the number(s) of the relevant item(s): ", color='green'))
-
-			# actual first check if it's an empty input, ask them to confirm or have them retry
-			if not selection_raw:
-				confirmation = input(color_str("No items have been selected, would you like to proceed? (y/n) ", color='magenta'))
-				if confirmation == 'y':
-					return list()
-				else: 
-					continue
-
-			# check if input is a single integer
-			elif selection_raw.isdigit():
-				if int(selection_raw) not in valid_values:
-					color_print("Error: invalid selection, use the product numbers", color='red')
-					continue
-
-				return [int(selection_raw)]
-
-			# check if input is a comma separated string
-			elif ',' in selection_raw:
-				selection_list = selection_raw.split(',')
-
-				try:
-					# convert the list of integers to a set so duplicates get removed, this eliminates
-					# errors on the server side (so technically this could just be an error, but for
-					# a better user experience it gets fixed here)
-					int_list = list(set([int(s.strip()) for s in selection_list]))
-
-					for i in int_list:
-						if i not in valid_values:
-							color_print("Error: invalid selection, use the product numbers", color='red')
-							continue
-
-					return int_list
-				except:
-					color_print("Error: invalid selection, provide a comma separated list of integers", color='red')
-					continue
-
-			# if the input didn't fall into any of the valid categories, prompt again
+			if quantity <= image_product.stock:
+				image_product.set_quantity(quantity)
+				self.shopping_cart.add_to_cart(image_product)
 			else:
-				color_print("Error: invalid selection, provide a comma separated list of integers", color='red')
-
-	# TODO: move to a input_utils file (no class)
-	def prompt_for_positive_integer(self, input_message):
-		"""Prompts user until they enter a valid positive integer. 
-		
-		Receives input from the user and performs checks to ensure that it is both 
-		positive and an integer. If the input was not valid, the user is prompted again.
-		
-		Args:
-			input_message (str): Text to be displayed at the prompt. 
-		
-		Returns:
-			int: The positive integer provided by the user.
-		"""
-		value = ''
-
-		while not value.isdigit() or int(value) < 0:
-			value = input(input_message)
-			if not value.isdigit() or int(value) < 0:
-				color_print("Error: Value must be a positive integer", color='red')
-
-		return int(value)
+				color_print("Error: Quantity entered for [%d] exceeds existing stock of %d" % (image_product.image_id, image_product.stock), color='red')
 
 	def receive_image(self, image_batch):
 		"""Receives an image from the server and adds it to the batch.
