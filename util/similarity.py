@@ -15,7 +15,6 @@ Caveat: This implementation works at the level of an entire image and does not p
 		on the assuming that product images will typically appear on a transparent 
 		or white background rather than products being used in real settings. 
 
-
 Attributes:
 	module (Module): MobileNet Tensorflow module for computing feature vectors.
 

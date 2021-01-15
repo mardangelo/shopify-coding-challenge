@@ -239,6 +239,7 @@ class ServerCommander():
 		if images_to_be_displayed == 0:
 			color_print("No images found matching the given tags", color='magenta')
 			self.communicator.send_enum(Signal.NO_RESULTS)
+			return
 
 		self.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images_with_tags, [tags])
 
@@ -263,11 +264,10 @@ class ServerCommander():
 		# send images that do not quite amount to a full batch
 		if image_count < batch_size:
 			self.communicator.send_enum(Signal.START_TRANSFER)
-			self.communicator.send_enum(Signal.START_BATCH) 
 			images = retrieve_func(*retrieve_args)
 			self.send_batch_of_images(images)
-			self.communicator.send_enum(Signal.END_BATCH)
 			self.communicator.send_enum(Signal.END_TRANSFER)
+			return
 
 		# keep sending images in batches until the user sends a stop signal or there are no more images
 		images_sent = 0

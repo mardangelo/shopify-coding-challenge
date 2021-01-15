@@ -11,6 +11,8 @@ from lazyme.string import color_print
 from .cipher import Cipher
 from .enum.signal import Signal
 
+DEBUG = True
+
 class Code(Enum):
 	"""Short codes used for communication. 
 	
@@ -248,7 +250,7 @@ class Communicator:
 		code = self.socket.recv(Code.get_size())
 
 		if not code:
-			return None
+			raise ConnectionError("Failed to receive a code")
 
 		return Code(code.decode('utf8'))
 
@@ -273,6 +275,9 @@ class Communicator:
 		Args:
 			message (bytes): Data to be sent.
 		"""
+		if DEBUG:
+			color_print("Sending: %.30s" % message, color='red')
+			
 		(ciphertext, tag, nonce) = self.cipher.encrypt(message)
 
 		# The only length that needs to be computed is that of the ciphertext
@@ -321,6 +326,9 @@ class Communicator:
 			except ValueError:
 				color_print("Error receiving item, sender should retransmit", color='red')
 				self.send_code(Code.ERROR)
+
+		if DEBUG:
+			color_print("Received: %.30s" % data, color='red')
 
 		return data
 
