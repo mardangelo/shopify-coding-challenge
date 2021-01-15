@@ -1,8 +1,8 @@
-from enum import Enum, auto
+from enum import IntEnum, auto
 
 from lazyme import color_str
 
-class Tags(Enum):
+class Tags(IntEnum):
 	# clothing categories
 	clothing_accessories = auto()
 	footwear = auto()
