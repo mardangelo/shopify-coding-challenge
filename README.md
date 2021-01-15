@@ -19,13 +19,13 @@ Basic client side shopping cart functionality (add, update, remove).
 
 ## Setup
 
-Due to incompatibilities between TensorFlow and newer Python versions, this prototype must be run using Python 3.8.x or lower. It has been developed and tested with Python 3.8.3. Ensure that you have pip3 installed.
+* Due to incompatibilities between TensorFlow and newer Python versions, this prototype must be run using Python 3.8.x or lower. It has been developed and tested with Python 3.8.3. Ensure that you have pip3 installed.
 
-Install the required python packages using pip:
+* Install the required python packages using pip:
 
 ```pip3 install -r requirements.txt```
 
-Install [SQLite3](https://www.sqlite.org/download.html).
+* Install [SQLite3](https://www.sqlite.org/download.html).
 
 ## Usage
 
