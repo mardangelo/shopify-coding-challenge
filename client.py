@@ -102,7 +102,7 @@ class ClientPrompt(cmd2.Cmd):
 		color_print("Attempting to create user %s" % username, 'blue')
 
 		password = getpass.getpass()
-		if password is none:
+		if not password:
 			color_print("Error: Must enter a password", color='red')
 			return
 
@@ -136,7 +136,7 @@ class ClientPrompt(cmd2.Cmd):
 		color_print("Attempting to log in as %s" % username, color='blue')
 
 		password = getpass.getpass()
-		if password is none:
+		if not password:
 			color_print("Error: Must enter a password", color='red')
 			return
 
