@@ -96,11 +96,15 @@ class ClientPrompt(cmd2.Cmd):
 			username (str): Username of the user to be created. 
 		"""
 		if username == "":
-			color_print("Must provide a username", color='red')
+			color_print("Error: Must provide a username", color='red')
 			return
 
 		color_print("Attempting to create user %s" % username, 'blue')
+
 		password = getpass.getpass()
+		if password is none:
+			color_print("Error: Must enter a password", color='red')
+			return
 
 		self.send_command(Command.CREATE_USER)
 
@@ -126,12 +130,15 @@ class ClientPrompt(cmd2.Cmd):
 			username (str): Username to log in with.
 		""" 
 		if username == "":
-			color_print("Must provide a username", color='red')
+			color_print("Error: Must provide a username", color='red')
 			return
 
 		color_print("Attempting to log in as %s" % username, color='blue')
 
 		password = getpass.getpass()
+		if password is none:
+			color_print("Error: Must enter a password", color='red')
+			return
 
 		self.send_command(Command.LOGIN)
 		

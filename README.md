@@ -61,9 +61,13 @@ Basic client side shopping cart functionality (add, update, remove).
 
 2. If the client and server experience an error and the protocol being executed that time is interrupted (resulting in a misalignment of messages being send and those being expected to be received), the server will disconnect the client and wait for new connections. The client will have to be restarted in order to re-establish the connection. Future work would include gracefully detecting that the connection was lost and attempting to re-connect to the server. 
 
-3. The server is currently single threaded and can only connect to one client (largely due to the fact that it only uses one secret key). This simplifies the design of the repository itself by not having to worry about threading and race conditions and database transactions or key storage for different clients. Future work would implement support for multiple (potentially simultaneous) clients. 
+3. The server only works with a single client (or multiple clients if they share the key, which would be bad). This was a simplification, much like the use of symmetric cryptography. To support multiple clients with distinct keys, asymmetric cryptography would be the way to go. The server would only need to store public keys (which aren't sensitive if leaked) and only manage a single private key of its own. 
 
-4. Images can only be searched by similarity or by tag. Other possibilities include searching on file name, but a better solution would be to have the user provide an image name and an image description to be searched. Future work would implement such a change. 
+4. Keys are not stored securely for the purposes of this demo. In a real environment the keys could be managed by secure hardware for best security. 
+
+5. The server is currently single threaded and can only connect to one client as a time. This simplifies the design of the repository itself by not having to worry about threading and race conditions and database transactions, but multithreading and transactions could be implemented as an extension. 
+
+6. Images can only be searched by similarity or by tag. Other possibilities include searching on file name, but a better solution would be to have the user provide an image name and an image description to be searched. Future work would implement such a change. 
 
 ### Future Development Possibilities
 
@@ -75,4 +79,4 @@ Basic client side shopping cart functionality (add, update, remove).
 
 4. Proper commerce implementation which would communicate with the server to complete orders and decrement stock, etc. 
 
-5. Multiple clients, must have a unique secret key for each client, which could lead to key explosion so consider switching to an asymmetric crypto scheme. 
+5. Multiple clients. 
