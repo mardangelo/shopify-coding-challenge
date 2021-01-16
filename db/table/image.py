@@ -1,5 +1,6 @@
 from sqlalchemy import Column, String, Integer, Float, LargeBinary
 from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy.orm import relationship
 
 from .user import User
 
@@ -14,3 +15,5 @@ class Image(Base):
 	quantity = Column(Integer)
 	cost = Column(Float)
 	seller = Column(Integer, ForeignKey(User.id))
+
+	image_tags = relationship("ImageTag", cascade="all, delete")
