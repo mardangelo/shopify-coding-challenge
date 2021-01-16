@@ -8,7 +8,7 @@ A prototype of an image repository that is managed by a server, which can be man
 Images can be uploaded by the client to the server where they are saved to disk and recorded into 
 the database. 
 
-All encryption between the client and server is encrypted and authenticated. 
+All communication between the client and server is encrypted and authenticated. 
 
 Users can browse images in the repository by tags (or simply view all images). 
 
@@ -21,7 +21,7 @@ Basic client side shopping cart functionality (add, update, remove).
 
 ## Setup
 
-* Due to incompatibilities between TensorFlow and newer Python versions, this prototype must be run using Python 3.8.x or lower. It has been developed and tested with Python 3.8.3. Ensure that you have pip3 installed.
+* Due to incompatibilities between TensorFlow and newer Python versions, this prototype must be run using Python 3.8.x or lower. It has been developed and tested with Python 3.8.3. Ensure that you have pip3 installed. For certain versions of Python (e.g., 3.6.x, 3.7.x) on macOS you may need to install certificates in order to connect with https, run the ```Install Certificates.command``` executable included in the installation folder. 
 
 * Install the required python packages using pip:
 
@@ -41,11 +41,11 @@ Basic client side shopping cart functionality (add, update, remove).
 
 	```python3 client.py```
 
-3. The client is implemented using cmd2 and can display the list of available commands using ```?``` and can display further information about any given command ```help <command_name>```.
+3. The client is implemented using cmd2 and can display the list of available commands using ```?``` or ```help``` and can display further information about any given command using ```? <command_name>``` or ```help <command_name>```. Until a user has logged in there are no commands available for interacting with the image repository.
 
 4. When running the client for the first time you must create a user using ```create_user <username>```, you will be prompted for a password. The username and password will be sent to the server and stored in a database so subsequent uses of the client can just directly login.
 
-5. After a user has been created, use ```login <username>``` to verify your credentials with the server. Now that you have logged in, other commands will become available.
+5. After a user has been created, use ```login <username>``` to verify your credentials with the server. Now that you have logged in, other commands will become available, you can display the unlocked set of commands using ```help```.
 
 6. You can upload images to the server using ```add_image```. Try adding at least 6 to demo some features. 
 
