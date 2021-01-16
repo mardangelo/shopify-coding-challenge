@@ -86,6 +86,7 @@ class ServerCommander():
 			Command.DELETE_IMAGE : self.delete_image,
 			Command.SEARCH_BY_IMAGE : self.search_by_image, 
 			Command.BROWSE_BY_TAG : self.browse_by_tag, 
+			Command.BROWSE_IMAGES : self.browse_images,
 			Command.EXIT : self.close_connection
 		}
 
@@ -307,6 +308,25 @@ class ServerCommander():
 			return
 
 		self.batch_transfer.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images_with_tags, [tags])
+
+	def browse_images(self):
+		"""Browses images (products) in the repository.
+		
+		Receives tag identifiers from the client and queries the database for images 
+		matching all of the tags. If no tags are provided, all images are considered to 
+		be matches. Matching images are sent in batches to the client. 
+		"""
+		if not self.check_if_logged_in():
+			return
+
+		images_to_be_displayed = self.db.count_images()
+
+		if images_to_be_displayed == 0:
+			color_print("No images found in the repository", color='magenta')
+			self.communicator.send_enum(Signal.NO_RESULTS)
+			return
+
+		self.batch_transfer.send_images_in_batches(images_to_be_displayed, self.db.retrieve_images)
 
 	def save_image_to_directory(self, directory, image, filename):
 		"""Saves an image into a directory.

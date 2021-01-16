@@ -313,6 +313,26 @@ class ClientPrompt(cmd2.Cmd):
 
 		self.batch_transfer.receive_batches_of_images(self.add_to_cart_prompt)
 
+	@with_category(CMD_CAT_IMAGE_REPOSITORY)
+	def do_browse_images(self, args):
+		"""Browses the images (products) in the repository.
+		
+		Retrieves batches of images from the repository and displays them to the user from most recently added 
+		to least recently added. 
+		"""
+		if not self.check_if_logged_in():
+			return
+
+		self.send_command(Command.BROWSE_IMAGES)
+
+		signal = self.communicator.receive_enum(Signal)
+
+		if signal == Signal.NO_RESULTS: 
+			color_print("No images found in the repository", color='magenta')
+			return
+
+		self.batch_transfer.receive_batches_of_images(self.add_to_cart_prompt)
+
 	def add_to_cart_prompt(self, image_batch):
 		"""Prompts the user to enter desired products and quantities.
 		

@@ -279,6 +279,36 @@ class Database():
 						   .join(matching_images, first_column == Image.id) \
 						   .offset(offset).limit(batch_size).all()
 
+	def count_images(self):
+		"""Returns the number of images in the database.
+		
+		Determines the total number of images recorded in the database.
+		
+		Returns:
+			int: The number of images.
+		"""
+		return self.session.query(Image.id).count()
+
+	def retrieve_images(self, batch_size=5, offset=0):
+		"""Gets information about images in the repository. 
+		
+		Retrieves necessary attributes about each image in the repository (path, cost, quantity). 
+		The number of images returned is capped at 5 (but may be less) and an offset can be 
+		provided in order to send images in batches (continuing from where the last batch ended). 
+		
+		Args:
+			batch_size (int): The maximum number of images to be returned. (default: {5})
+			offset (int): The offset to be passed to the query which denotes the point where 
+						  the results should start being retrieved from. (default: {0})
+
+		Returns:
+			list(tuple): A list where each element is a tuple representing an image and containing 
+						 (id, path to image, quantity, cost).
+		"""
+		return self.session.query(Image.id, Image.image_path, Image.quantity, Image.cost) \
+						   .order_by(Image.id.desc()).offset(offset).limit(batch_size).all()
+
+
 	def get_image_attributes(self, image_ids, batch_size=5, offset=0):
 		"""Retrieves the attributes for a batch of images.
 		

@@ -75,7 +75,7 @@ class BatchTransfer():
 
 		image_batch.append((image_id, image, filename, cost, quantity))
 
-	def send_images_in_batches(self, image_count, retrieve_func, retrieve_args, batch_size=5):
+	def send_images_in_batches(self, image_count, retrieve_func, retrieve_args=[], batch_size=5):
 		"""Sends images to the client in batches.
 		
 		Given a number of available images to be sent, batches of those images are packaged 
@@ -87,7 +87,7 @@ class BatchTransfer():
 			retrieve_func (function): A function that returns a list of tuples where each 
 									  tuple contains: (path to image, quantity, cost). This
 									  function should retrieve batch_size items.
-			retrieve_args (list): A list of any arguments to be passed to retrieve_func.
+			retrieve_args (list): A list of any arguments to be passed to retrieve_func. (default: {[]})
 			batch_size (int): The number of images to be included in a single batch. (default: {5})
 		"""
 		# send a signal to the client that images are about to be sent
