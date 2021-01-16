@@ -1,17 +1,22 @@
 import socket 
+import struct
 from enum import Enum
 
 from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
-import struct
 
 from lazyme.string import color_print
+
+import tensorflow as tf
 
 from .cipher import Cipher
 from .enum.signal import Signal
 
 DEBUG = False
+
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 class Code(Enum):
 	"""Short codes used for communication. 
@@ -151,6 +156,28 @@ class Communicator:
 		"""
 		return self.receive_and_decrypt().decode('utf8')
 
+	def check_image(self, image_path):
+		"""Tries to read an image to ensure it is valid.
+		
+		Attempts to read the image at the given path using tensorflow and handles errors.
+		
+		Args:
+			image_path (Path): The path to the image on disk.
+
+		Returns:
+			bool: True if the image was loaded successfully, False otherwise.
+		"""
+		try:
+			image = tf.io.read_file(str(image_path))
+			tf.io.decode_image(image)
+			return True
+		except tf.errors.NotFoundError:
+			color_print("Error: Could not locate image at %s" % str(image_path), color='red')
+			return False
+		except tf.errors.InvalidArgumentError as e:
+			color_print(e.message, color='red')
+			return False
+
 	def send_image(self, image_path):
 		"""Sends an image over the connection.
 		
@@ -160,18 +187,16 @@ class Communicator:
 		Args:
 			image_path (Path): The path to the image on disk.
 		"""
-		try:
-			with BytesIO() as output_image:
-				with Image.open(image_path) as source_image:
-					# jpeg can have two extensions, but only one is valid for PIL (jpeg)
-					extension = image_path.suffix.lstrip('.')
-					source_image.save(output_image, 'jpeg' if extension.lower() == 'jpg' else extension)
+		if not self.check_image(image_path):
+			return
 
-				self.encrypt_and_send(output_image.getvalue())
-		except FileNotFoundError:
-			color_print("Error: Could not locate image at given path", color='red')
-		except UnidentifiedImageError:
-			color_print("Error: File could not be opened as an image", color='red')
+		with BytesIO() as output_image:
+			with Image.open(image_path) as source_image:
+				# jpeg can have two extensions, but only one is valid for PIL (jpeg)
+				extension = image_path.suffix.lstrip('.')
+				source_image.save(output_image, 'jpeg' if extension.lower() == 'jpg' else extension)
+
+			self.encrypt_and_send(output_image.getvalue())
 
 	def receive_image(self):
 		"""Receives an image over the connection.

@@ -5,6 +5,8 @@ import socket
 from lazyme.string import color_print
 from pathlib import Path
 
+from PIL import UnidentifiedImageError
+
 from db.database import Database
 
 from util.batch_transfer import BatchTransfer
@@ -97,7 +99,7 @@ class ServerCommander():
 			command = self.communicator.receive_enum(Command)
 			color_print("Received command: %s" % command.value, color='green')
 			self.dispatch_command(command)
-		except (ValueError, UnicodeDecodeError, OverflowError, MemoryError): 
+		except (ValueError, UnicodeDecodeError, OverflowError, MemoryError, UnidentifiedImageError): 
 			# This often happens if the user kills the client in the middle of a protocol
 			# and the server has some state and expects signals/data instead of EXIT command.
 			# If the communication gets "misaligned" because of an abort a string may be 

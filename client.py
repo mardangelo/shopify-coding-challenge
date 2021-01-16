@@ -153,7 +153,7 @@ class ClientPrompt(cmd2.Cmd):
 	complete_add_image = cmd2.Cmd.path_complete
 
 	argparser_add_image = argparse.ArgumentParser()
-	argparser_add_image.add_argument('path', type=str, help='path to an image file')
+	argparser_add_image.add_argument('path', type=str, nargs='+', help='path to an image file (backslash escape is not supported)')
 	argparser_add_image.add_argument('price', type=float, help='price of the image (product)')
 	argparser_add_image.add_argument('quantity', type=int, help='number of image (product) to stock')
 
@@ -162,24 +162,25 @@ class ClientPrompt(cmd2.Cmd):
 	def do_add_image(self, opts):
 		"""Adds an image (product) to Image Repository.
 		
-		Uploads the image specified by path to the server along with the price. Prompts the user 
+		Uploads the image specified by path to the server along with the price. If the image does 
+		not exist or is of an invalid format an error will be reported. Prompts the user 
 		to select tags from a displayed list. Pre-defined tags are used as opposed to freeform 
-		text in order to avoid the issue of typos leading to missed matches.
-		
-		Args: (within argument parser opts)
-			path (str): Path to an image file.
-			price (float): Cost of the image (product).
-			quantity (int): Quantity of the image (product) in the inventory.
+		text in order to avoid the issue of typos leading to missed matches. 
+
+		Note: Paths can be entered using tab for autocompletion.
 		"""
 		if not self.check_if_logged_in():
 			return 
+
+		image_path = Path(" ".join(opts.path)).expanduser().resolve()
+		if not self.communicator.check_image(image_path):
+			return
 
 		Tags.display_tags_for_selection()
 		tags = prompt_for_integers(list(map(int, Tags))) 
 		
 		self.send_command(Command.ADD_IMAGE)
 
-		image_path = Path(opts.path)
 		self.communicator.send_image(image_path)
 		self.communicator.send_string(image_path.name)
 
@@ -188,7 +189,9 @@ class ClientPrompt(cmd2.Cmd):
 		self.communicator.send_list(tags)
 
 		if self.communicator.receive_enum(Signal) == Signal.FAILURE:
-			color_print("Error: Image %s could not be added because it already exists" % image_path.name, color='red')
+			color_print("Error: Image %s could not be added" % image_path.name, color='red')
+		else: 
+			color_print("Image %s was added successfully" % image_path.name, color='blue')
 	
 	complete_search_by_image = cmd2.Cmd.path_complete
 
@@ -202,9 +205,6 @@ class ClientPrompt(cmd2.Cmd):
 		
 		Uploads the given image to the server and performs a similarity computation
 		on the other images in the database using nearest neighbours. 
-		
-		Args: (within argument parser opts)
-			path (str): Path to an image file.
 		"""
 		if not self.check_if_logged_in():
 			return 
@@ -231,9 +231,6 @@ class ClientPrompt(cmd2.Cmd):
 		from the database. If the user enters no tags, all images can be shown. If the user 
 		enters multiple tags, then images matching the _intersection_ of those tags will be 
 		retrieved and displayed. 
-		
-		Args:
-			args: unused
 		"""
 		if not self.check_if_logged_in():
 			return
@@ -301,9 +298,6 @@ class ClientPrompt(cmd2.Cmd):
 
 		If the product exists in the cart it is removed. If the product was not in the cart a warning 
 		is displayed to the user.
-		
-		Args: (with argparser opts)
-			product_id (int): The id of the product that should be removed. 
 		"""
 		self.check_if_logged_in()
 		self.shopping_cart.remove_from_cart(opts.product_id)	
@@ -319,10 +313,6 @@ class ClientPrompt(cmd2.Cmd):
 
 		If the product exists in the cart it is updated with the new quantity. If the product was not in 
 		the cart a warning is displayed to the user.
-		
-		Args: (with argparser opts)
-			product_id (int): The id of the product that should be updated. 
-			quantity (int): The updated quantity of the product. 
 		"""
 		self.check_if_logged_in()
 		self.shopping_cart.update_in_cart(opts.product_id, opts.quantity)
