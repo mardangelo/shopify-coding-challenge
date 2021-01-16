@@ -114,7 +114,7 @@ def prompt_for_selection_and_quantity(valid_values):
 	# prompt the user for input until they enter something valid
 	while True:
 		try:
-			raw_selection = input(color_str("Enter the the id of the product and the desired quantity (or [ENTER] to continue): ", color='green'))
+			raw_selection = input(color_str("Enter the product id and the desired quantity (or [ENTER] to continue): ", color='green'))
 			if not raw_selection:
 				color_print("No items selected", color='blue')
 				return tuple()
