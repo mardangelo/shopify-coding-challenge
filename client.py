@@ -248,7 +248,7 @@ class ClientPrompt(cmd2.Cmd):
 	complete_search_by_image = cmd2.Cmd.path_complete
 
 	argparser_search_by_image = argparse.ArgumentParser()
-	argparser_search_by_image.add_argument('path', type=str, help='path to an image file')
+	argparser_search_by_image.add_argument('path', type=str, nargs='+', help='path to an image file (backslash escape is not supported)')
 
 	@with_category(CMD_CAT_IMAGE_REPOSITORY)
 	@with_argparser(argparser_search_by_image)
@@ -261,9 +261,12 @@ class ClientPrompt(cmd2.Cmd):
 		if not self.check_if_logged_in():
 			return 
 
+		image_path = Path(" ".join(opts.path)).expanduser().resolve()
+		if not self.communicator.check_image(image_path):
+			return
+
 		self.send_command(Command.SEARCH_BY_IMAGE)
 
-		image_path = Path(opts.path)
 		self.communicator.send_image(image_path)
 		self.communicator.send_string(image_path.name)
 
