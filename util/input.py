@@ -52,7 +52,7 @@ def prompt_for_integers(valid_values):
 		try:
 			raw_selection = input(color_str("Enter the number(s) of the relevant item(s) separated by spaces (or [ENTER] to continue): ", color='green'))
 			if not raw_selection:
-				color_print("No items selected", color='blue')
+				color_print("No items were selected", color='blue')
 				return list()
 
 			args = parser.parse_args(process_input(raw_selection))

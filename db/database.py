@@ -176,6 +176,28 @@ class Database():
 
 		return True
 
+	def delete_image(self, image_id):
+		"""Deletes an image in the repository.
+		
+		Checks if the database contains an entry for the given image identifier, retrieves the 
+		path to the image, and deletes the associated entries in the database.
+		
+		Args:
+			image_id (int): The repository identifier of the image.
+		
+		Returns:
+			str: The path to the deleted image on disk, or None if the image does not exist.
+		"""
+		image = self.session.query(Image).filter_by(id=image_id).one_or_none()
+
+		if not image:
+			return None
+
+		self.session.delete(image)
+		self.session.commit()
+
+		return image.image_path
+
 	def add_tags(self, image_id, tags):
 		"""Associate the given tags with the image in the database.
 		

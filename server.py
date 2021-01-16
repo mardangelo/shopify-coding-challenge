@@ -79,13 +79,14 @@ class ServerCommander():
 		self.batch_transfer = BatchTransfer(self.communicator)
 
 		self.commands = {
+			Command.CREATE_USER : self.create_user,
 			Command.LOGIN : self.login, 
 			Command.ADD_IMAGE : self.add_image,
 			Command.UPDATE_IMAGE : self.update_image, 
-			Command.CREATE_USER: self.create_user, 
-			Command.SEARCH_BY_IMAGE: self.search_by_image, 
-			Command.BROWSE_BY_TAG: self.browse_by_tag, 
-			Command.EXIT: self.close_connection
+			Command.DELETE_IMAGE : self.delete_image,
+			Command.SEARCH_BY_IMAGE : self.search_by_image, 
+			Command.BROWSE_BY_TAG : self.browse_by_tag, 
+			Command.EXIT : self.close_connection
 		}
 
 		self.db = Database()
@@ -231,6 +232,31 @@ class ServerCommander():
 			return
 
 		color_print("Image [%d] updated with ($%.2f, %d)" % (image_id, cost, quantity), color='blue')
+		self.communicator.send_enum(Signal.SUCCESS)
+
+	def delete_image(self):
+		"""Deletes an image in the repository.
+		
+		Receives the image identifier and checks if the image exists in the database, if it exists 
+		the image path is pulled and used to delete the file on disk (in addition to the information 
+		in the database). 
+		"""
+		if not self.check_if_logged_in():
+			return
+
+		image_id = self.communicator.receive_int()
+
+		image_path = self.db.delete_image(image_id)
+
+		if not image_path:
+			color_print("Error: the requested image does not exist in the database", color='red')
+			self.communicator.send_enum(Signal.FAILURE)
+			return
+
+		# delete the image on disk
+		Path(image_path).unlink()
+
+		color_print("Image [%d] deleted" % image_id, color='blue')
 		self.communicator.send_enum(Signal.SUCCESS)
 
 	def search_by_image(self):
