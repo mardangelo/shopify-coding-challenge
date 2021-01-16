@@ -25,6 +25,9 @@ Attributes:
 	N_NEAREST_NEIGHBOURS (int): The number of nearest neighbours to find.
 	NUM_TREES (int): The number of trees to populate the Annoy forest with. More 
 					 trees improves precision when querying.
+
+	NEIGHBOUR_THRESHOLD (float): The distance at which to threshold computed 
+								 neighbours neighbours 
 """
 
 import os
@@ -44,6 +47,8 @@ COLOUR_CHANNELS = 3
 FEATURE_VECTOR_DIMENSIONS = 1792
 N_NEAREST_NEIGHBOURS = 20
 NUM_TREES = 10000
+
+NEIGHBOUR_THRESHOLD = 1.0
 
 def preprocess_image(path):
 	"""Converts an image to a tensor representation (for use with Tensorflow). 
@@ -139,6 +144,10 @@ def compute_nearest_neighbours(source_tensor, feature_tensors):
 	t.build(NUM_TREES)
 
 	# calculates the nearest neighbours to the source tensor in the forest
-	neighbour_ids = t.get_nns_by_vector(source_tensor[0], N_NEAREST_NEIGHBOURS)
+	(neighbour_ids, neighbour_distances) = t.get_nns_by_vector(source_tensor[0], N_NEAREST_NEIGHBOURS, include_distances=True)
 
-	return neighbour_ids
+	# massage into a list of tuples of (image_id, distance) rather than two separate lists of each
+	paired_list = list(zip(neighbour_ids, neighbour_distances))
+	nearby_neighbours = [neighbour[0] for neighbour in paired_list if neighbour[1] < NEIGHBOUR_THRESHOLD]
+
+	return nearby_neighbours
