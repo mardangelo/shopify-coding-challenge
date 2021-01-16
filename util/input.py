@@ -78,6 +78,23 @@ class PositiveIntegerAction(argparse.Action):
 
 		setattr(namespace, self.dest, values)
 
+class PositiveFloatAction(argparse.Action):
+	"""Action that validates input as positive float.
+	
+	After the input has been successfully converted to an float, this action checks that 
+	the value is non-negative.
+	"""
+
+	def __call__(self, parser, namespace, values, option_string=None):
+		"""Validates that a given value is a positive float.
+		
+		See base class for more non-customized details.
+		"""
+		if values < 0:
+			parser.error("Error: Minimum cost is 0")
+
+		setattr(namespace, self.dest, values)
+
 def prompt_for_selection_and_quantity(valid_values):
 	"""Prompts the user to present a valid selection and enter a desired quantity.
 	

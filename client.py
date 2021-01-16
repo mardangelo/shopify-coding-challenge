@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 from util.batch_transfer import BatchTransfer
 from util.communicator import Communicator
 from util.input import prompt_for_integers, prompt_for_selection_and_quantity
+from util.input import PositiveIntegerAction, PositiveFloatAction
 from util.shopping import ShoppingCart, Product
 
 from util.enum.command import Command
@@ -154,8 +155,8 @@ class ClientPrompt(cmd2.Cmd):
 
 	argparser_add_image = argparse.ArgumentParser()
 	argparser_add_image.add_argument('path', type=str, nargs='+', help='path to an image file (backslash escape is not supported)')
-	argparser_add_image.add_argument('price', type=float, help='price of the image (product)')
-	argparser_add_image.add_argument('quantity', type=int, help='number of image (product) to stock')
+	argparser_add_image.add_argument('price', type=float, help='price of the image (product)', action=PositiveFloatAction)
+	argparser_add_image.add_argument('quantity', type=int, help='number of image (product) to stock', action=PositiveIntegerAction)
 
 	@with_category(CMD_CAT_IMAGE_REPOSITORY)
 	@with_argparser(argparser_add_image)
