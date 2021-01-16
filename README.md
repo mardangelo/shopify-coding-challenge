@@ -51,7 +51,7 @@ Basic client side shopping cart functionality (add, update, remove).
 
 7. You can request images from the server using ```browse_by_tags``` and ```search_by_image```. Any images sent by the server will be displayed and you will be able to add items to your cart. 
 
-8. You can use ```view_cart```, ```remove_from_cart```, and ```modify_cart``` to interact with your shopping cart. 
+8. You can use ```view_cart```, ```remove_from_cart```, and ```update_cart``` to interact with your shopping cart. 
 
 ### TODOs
 

@@ -44,5 +44,5 @@ def display_batch_of_images(images):
 		j += 2
 
 	plt.axis('off')
-	plt.show(block=True)
+	plt.show(block=False)
 
