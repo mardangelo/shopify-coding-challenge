@@ -90,6 +90,19 @@ class ShoppingCart:
 		color_print("Updating quantity of product [%d]" % product_id, color='blue')
 		original.quantity = quantity
 
+	def contains(self, product_id):
+		"""Determines whether the provided product is in the shopping cart.
+		
+		Checks whether the shopping cart contains the given product identifier. 
+		
+		Args:
+			product_id (int): The id of the product.
+		
+		Returns:
+			bool: True if the product is in the card, False otherwise. 
+		"""
+		return product_id in self.cart
+
 	def display_cart(self):
 		"""Displays the current shopping cart.
 		

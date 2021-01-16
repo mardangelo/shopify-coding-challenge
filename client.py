@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from util.batch_transfer import BatchTransfer
 from util.communicator import Communicator
-from util.input import prompt_for_integers, prompt_for_selection_and_quantity
+from util.input import prompt_for_integers, prompt_for_selection_and_quantity, prompt_for_binary_choice
 from util.input import PositiveIntegerAction, PositiveFloatAction
 from util.shopping import ShoppingCart, Product
 
@@ -242,6 +242,12 @@ class ClientPrompt(cmd2.Cmd):
 		"""
 		if not self.check_if_logged_in():
 			return 
+
+		if self.shopping_cart.contains(opts.image_id):
+			if prompt_for_binary_choice("Warning: Product is in shopping cart, do you want to continue and remove it? (y/n)"):
+				self.shopping_cart.remove_from_cart(opts.image_id)
+			else: 
+				return
 
 		self.send_command(Command.DELETE_IMAGE)
 
