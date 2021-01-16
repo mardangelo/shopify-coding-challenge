@@ -193,6 +193,35 @@ class ClientPrompt(cmd2.Cmd):
 			color_print("Error: Image %s could not be added" % image_path.name, color='red')
 		else: 
 			color_print("Image %s was added successfully" % image_path.name, color='blue')
+			image_id = self.communicator.receive_int()
+			color_print("Added image [%d] %s ($%.2f, %d)" % (image_id, image_path.name, opts.price, opts.quantity), color='blue')
+
+	argparser_update_image = argparse.ArgumentParser()
+	argparser_update_image.add_argument('image_id', type=int, help='the identifier of the image to be updated')
+	argparser_update_image.add_argument('price', type=float, help='price of the image (product)', action=PositiveFloatAction)
+	argparser_update_image.add_argument('quantity', type=int, help='number of image (product) to stock', action=PositiveIntegerAction)
+
+	@with_category(CMD_CAT_IMAGE_REPOSITORY)
+	@with_argparser(argparser_update_image)
+	def do_update_image(self, opts):
+		"""Updates an image (product) in the Image Repository.
+		
+		Updates the image specified by id with the new cost and quantity. If the image does not 
+		exist in the repository, this operation fails and reports an error. 
+		"""
+		if not self.check_if_logged_in():
+			return 
+
+		self.send_command(Command.UPDATE_IMAGE)
+
+		self.communicator.send_int(opts.image_id)
+		self.communicator.send_float(opts.price)
+		self.communicator.send_int(opts.quantity)
+
+		if self.communicator.receive_enum(Signal) == Signal.FAILURE:
+			color_print("Error: Image [%d] could not be updated" % opts.image_id, color='red')
+		else:
+			color_print("Updated image [%d] with ($%.2f, %d)" % (opts.image_id, opts.price, opts.quantity), color='blue')
 	
 	complete_search_by_image = cmd2.Cmd.path_complete
 

@@ -150,6 +150,32 @@ class Database():
 
 		return image.id
 
+	def update_image(self, image_id, cost, quantity):
+		"""Updates the image within the repository.
+		
+		Checks if the database contains an entry for the given image identifier and updates its cost 
+		and quantity. 
+		
+		Args:
+			image_id (int): The repository identifier of the image.
+			cost (float): The updated cost of the image.
+			quantity (int): The updated quantity of the image in stock.
+		
+		Returns:
+			bool: True if the image was updated, False if the image was not in the repository.
+		"""
+		image = self.session.query(Image).filter_by(id=image_id).one_or_none()
+
+		if not image:
+			return False
+
+		image.cost = cost
+		image.quantity = quantity
+
+		self.session.commit()
+
+		return True
+
 	def add_tags(self, image_id, tags):
 		"""Associate the given tags with the image in the database.
 		

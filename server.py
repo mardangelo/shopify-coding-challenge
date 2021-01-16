@@ -81,6 +81,7 @@ class ServerCommander():
 		self.commands = {
 			Command.LOGIN : self.login, 
 			Command.ADD_IMAGE : self.add_image,
+			Command.UPDATE_IMAGE : self.update_image, 
 			Command.CREATE_USER: self.create_user, 
 			Command.SEARCH_BY_IMAGE: self.search_by_image, 
 			Command.BROWSE_BY_TAG: self.browse_by_tag, 
@@ -208,6 +209,28 @@ class ServerCommander():
 
 		self.db.add_tags(image_id, tag_selection)
 
+		self.communicator.send_enum(Signal.SUCCESS)
+		self.communicator.send_int(image_id)
+
+	def update_image(self):
+		"""Updates an image in the repository.
+		
+		Receives the image identifier, price, and quantity from the client and updates the image information 
+		if the image exists in the database. 
+		"""
+		if not self.check_if_logged_in():
+			return
+
+		image_id = self.communicator.receive_int()
+		cost = self.communicator.receive_float()
+		quantity = self.communicator.receive_int()
+
+		if not self.db.update_image(image_id, cost, quantity):
+			color_print("Error: the requested image does not exist in the database", color='red')
+			self.communicator.send_enum(Signal.FAILURE)
+			return
+
+		color_print("Image [%d] updated with ($%.2f, %d)" % (image_id, cost, quantity), color='blue')
 		self.communicator.send_enum(Signal.SUCCESS)
 
 	def search_by_image(self):
